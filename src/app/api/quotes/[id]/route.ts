@@ -28,7 +28,7 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { status, startDate, endDate, notes, items, totalHT, totalTTC, pdfUrl, discount, approve, refuse, clientRefusalNote } = body;
+    const { status, startDate, endDate, notes, items, totalHT, totalTTC, pdfUrl, discount, approve, refuse, clientRefusalNote, projectName } = body;
 
     // Client approves admin modifications
     if (approve === true && !isAdmin) {
@@ -109,6 +109,7 @@ export async function PUT(
     if (totalTTC !== undefined) updates.totalTTC = Number(totalTTC);
     if (pdfUrl !== undefined) updates.pdfUrl = pdfUrl;
     if (discount !== undefined) updates.discount = Number(discount);
+    if (projectName !== undefined) updates.projectName = projectName || null;
 
     await db.update(quoteTable).set(updates).where(eq(quoteTable.id, id));
 
