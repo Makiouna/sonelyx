@@ -21,13 +21,15 @@ interface QuoteItem {
 
 interface Quote {
   id: string;
-  status: 'draft' | 'pending' | 'validated' | 'cancelled';
+  status: 'draft' | 'pending' | 'modified_by_admin' | 'pdf_pending' | 'validated' | 'cancelled';
   startDate: string;
   endDate: string;
   notes: string | null;
   items: QuoteItem[];
   totalHT: number;
   totalTTC: number;
+  pdfUrl: string | null;
+  discount: number;
   createdAt: string;
 }
 
@@ -457,26 +459,52 @@ export default function UserProfile() {
             ) : finishedQuotes.length > 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {finishedQuotes.map(fq => (
-                  <div key={fq.id} style={{ border: '1px solid rgba(0,0,0,.06)', borderRadius: '14px', padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: '13px', color: '#1d1d1f' }}>Devis #{fq.id}</div>
-                      <div style={{ fontSize: '11px', color: '#86868b', marginTop: '4px' }}>
-                        {new Date(fq.startDate).toLocaleDateString('fr-FR')} au {new Date(fq.endDate).toLocaleDateString('fr-FR')}
+                  <div key={fq.id} style={{ border: '1px solid rgba(0,0,0,.06)', borderRadius: '14px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: '13px', color: '#1d1d1f' }}>Devis #{fq.id}</div>
+                        <div style={{ fontSize: '11px', color: '#86868b', marginTop: '4px' }}>
+                          {new Date(fq.startDate).toLocaleDateString('fr-FR')} au {new Date(fq.endDate).toLocaleDateString('fr-FR')}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
+                        <span style={{
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          padding: '4px 10px',
+                          borderRadius: '980px',
+                          backgroundColor: fq.status === 'validated' ? '#e2fbe8' : '#fef2f2',
+                          color: fq.status === 'validated' ? '#1db954' : '#ef4444'
+                        }}>
+                          {fq.status === 'validated' ? 'Validé' : 'Annulé'}
+                        </span>
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: '#1d1d1f' }}>{fq.totalHT.toLocaleString('fr-FR')} € HT</div>
                       </div>
                     </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <span style={{
-                        fontSize: '10px',
-                        fontWeight: 700,
-                        padding: '4px 10px',
-                        borderRadius: '980px',
-                        backgroundColor: fq.status === 'validated' ? '#e2fbe8' : '#fef2f2',
-                        color: fq.status === 'validated' ? '#1db954' : '#ef4444'
-                      }}>
-                        {fq.status === 'validated' ? 'Validé' : 'Annulé'}
-                      </span>
-                      <div style={{ fontSize: '12px', fontWeight: 700, color: '#1d1d1f', marginTop: '6px' }}>{fq.totalHT.toLocaleString('fr-FR')} € HT</div>
-                    </div>
+
+                    {fq.status === 'validated' && fq.pdfUrl && (
+                      <div style={{ borderTop: '1px solid rgba(0,0,0,.04)', paddingTop: '10px', display: 'flex', justifyContent: 'flex-end' }}>
+                        <a
+                          href={fq.pdfUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '6px 12px',
+                            borderRadius: '8px',
+                            backgroundColor: '#e2fbe8',
+                            color: '#1db954',
+                            textDecoration: 'none',
+                            fontWeight: 700,
+                            fontSize: '12px'
+                          }}
+                        >
+                          Télécharger mon Devis PDF
+                        </a>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

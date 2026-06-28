@@ -32,6 +32,45 @@ export default function Home() {
   const [catalogue, setCatalogue] = useState<EquipmentItem[]>([]);
   const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('sonelyx_devis');
+      if (stored) {
+        setSelected(JSON.parse(stored));
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
+
+  const persist = (next: Record<string, boolean>) => {
+    try {
+      localStorage.setItem('sonelyx_devis', JSON.stringify(next));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    const next = { ...selected };
+    if (next[id]) {
+      delete next[id];
+    } else {
+      next[id] = true;
+    }
+    setSelected(next);
+    persist(next);
+  };
+
+  const clearSelection = () => {
+    setSelected({});
+    persist({});
+  };
+
+  const count = Object.keys(selected).length;
+  const selectionLabel = `${count} article${count > 1 ? 's' : ''} sélectionné${count > 1 ? 's' : ''}`;
 
   // Fetch dynamic catalogue and categories
   useEffect(() => {
@@ -110,7 +149,7 @@ export default function Home() {
             Direction technique, sound &amp; light design et location de matériel professionnel pour les événements les plus exigeants.
           </p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px 28px', justifyContent: 'center', alignItems: 'center', margin: '38px' }}>
-            <Link href="/location/catalogue#contact" style={{ display: 'inline-flex', alignItems: 'center', padding: '14px 30px', borderRadius: '980px', backgroundColor: '#1d1d1f', color: '#fff', textDecoration: 'none', fontWeight: 600, fontSize: '16px', transition: 'background .25s, transform .15s' }}>
+            <Link href="#contact" style={{ display: 'inline-flex', alignItems: 'center', padding: '14px 30px', borderRadius: '980px', backgroundColor: '#1d1d1f', color: '#fff', textDecoration: 'none', fontWeight: 600, fontSize: '16px', transition: 'background .25s, transform .15s' }}>
               Demander un devis sur-mesure
             </Link>
             <Link href="/location/catalogue" style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#0071e3', textDecoration: 'none', fontWeight: 600, fontSize: '16px' }}>
@@ -318,9 +357,28 @@ export default function Home() {
                             {isRequest ? 'Sur devis' : `${e.price} € ${e.priceTax || 'HT'}`}
                           </span>
                         </div>
-                        <Link href={`/location/catalogue/${e.id}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '14px', fontWeight: 600, color: '#0071e3', textDecoration: 'none' }}>
-                          Fiche tech. <span style={{ fontWeight: 400 }}>›</span>
-                        </Link>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <Link href={`/location/catalogue/${e.id}`} style={{ fontSize: '14px', fontWeight: 600, color: '#0071e3', textDecoration: 'none' }}>
+                            Fiche tech.
+                          </Link>
+                          <button
+                            onClick={() => toggleSelect(e.id)}
+                            style={{
+                              padding: '8px 16px',
+                              borderRadius: '980px',
+                              border: 'none',
+                              cursor: 'pointer',
+                              fontSize: '13px',
+                              fontWeight: 600,
+                              fontFamily: 'inherit',
+                              transition: 'all .2s',
+                              backgroundColor: !!selected[e.id] ? '#e8f1fd' : '#1d1d1f',
+                              color: !!selected[e.id] ? '#0071e3' : '#ffffff'
+                            }}
+                          >
+                            {!!selected[e.id] ? '✓ Sélectionné' : 'Ajouter'}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -359,7 +417,7 @@ export default function Home() {
           <h2 style={{ fontWeight: 800, fontSize: 'clamp(38px,6.6vw,84px)', lineHeight: 1.02, letterSpacing: '-.035em', margin: '0 0 24px' }}>Allumons votre prochaine scène.</h2>
           <p style={{ fontSize: 'clamp(17px,1.8vw,21px)', color: '#6e6e73', maxWidth: '500px', margin: '0 auto 40px', lineHeight: 1.5 }}>Parlez-nous de votre projet. Devis sur-mesure sous 24h, étude technique offerte.</p>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px 28px', justifyContent: 'center', alignItems: 'center' }}>
-            <Link href="/location/catalogue#contact" style={{ display: 'inline-flex', alignItems: 'center', padding: '16px 34px', borderRadius: '980px', backgroundColor: '#1d1d1f', color: '#fff', textDecoration: 'none', fontWeight: 600, fontSize: '17px', transition: 'background .25s, transform .15s' }}>
+            <Link href="/location/catalogue" style={{ display: 'inline-flex', alignItems: 'center', padding: '16px 34px', borderRadius: '980px', backgroundColor: '#1d1d1f', color: '#fff', textDecoration: 'none', fontWeight: 600, fontSize: '17px', transition: 'background .25s, transform .15s' }}>
               Démarrer mon projet
             </Link>
             <Link href="/location/catalogue" style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#0071e3', textDecoration: 'none', fontWeight: 600, fontSize: '17px' }}>
@@ -368,6 +426,19 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {/* ===== FLOATING DEVIS BAR ===== */}
+      {count > 0 && (
+        <div style={{ position: 'fixed', left: '50%', bottom: '24px', transform: 'translateX(-50%)', zIndex: 70, display: 'flex', alignItems: 'center', gap: '16px', padding: '11px 11px 11px 22px', borderRadius: '980px', backgroundColor: 'rgba(29,29,31,.92)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', boxShadow: '0 20px 54px -18px rgba(0,0,0,.6)', color: '#fff', maxWidth: 'calc(100vw - 32px)' }}>
+          <span style={{ fontSize: '14px', fontWeight: 600, whiteSpace: 'nowrap' }}>{selectionLabel}</span>
+          <Link href="/location/panier" style={{ display: 'inline-flex', alignItems: 'center', padding: '10px 22px', borderRadius: '980px', backgroundColor: '#fff', color: '#1d1d1f', textDecoration: 'none', fontWeight: 600, fontSize: '14px', whiteSpace: 'nowrap' }}>
+            Demander un devis
+          </Link>
+          <button onClick={clearSelection} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,.6)', fontSize: '13px', fontWeight: 500, padding: '6px', fontFamily: 'inherit' }}>
+            Effacer
+          </button>
+        </div>
+      )}
 
       <Footer />
     </div>

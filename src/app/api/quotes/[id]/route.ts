@@ -21,7 +21,7 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { status, startDate, endDate, notes, items, totalHT, totalTTC } = body;
+    const { status, startDate, endDate, notes, items, totalHT, totalTTC, pdfUrl, discount } = body;
 
     const isAdmin = session.user && (session.user as any).role === 'admin';
     const whereClause = isAdmin 
