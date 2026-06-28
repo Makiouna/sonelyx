@@ -56,6 +56,8 @@ export default function AdminDashboard() {
   const [loadingCategories, setLoadingCategories] = useState(true);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [catalogPage, setCatalogPage] = useState(1);
+  const [catalogPageSize, setCatalogPageSize] = useState(25);
 
   const [editingItem, setEditingItem] = useState<EquipmentItem | null>(null);
 
@@ -645,6 +647,13 @@ export default function AdminDashboard() {
     );
   });
 
+  const catalogTotalPages = Math.max(1, Math.ceil(filteredEquipment.length / catalogPageSize));
+  const catalogPageClamped = Math.min(catalogPage, catalogTotalPages);
+  const paginatedEquipment = filteredEquipment.slice(
+    (catalogPageClamped - 1) * catalogPageSize,
+    catalogPageClamped * catalogPageSize
+  );
+
   const adminLinks = [
     { label: 'Espace Location', href: '/location/catalogue' },
     { label: 'Espace Profil', href: '/profil' },
@@ -834,7 +843,7 @@ export default function AdminDashboard() {
                       type="text"
                       placeholder="Rechercher un matériel (nom, marque, description, ID)..."
                       value={searchQuery}
-                      onChange={e => setSearchQuery(e.target.value)}
+                      onChange={e => { setSearchQuery(e.target.value); setCatalogPage(1); }}
                       style={{
                         padding: '8px 18px',
                         borderRadius: '980px',
@@ -877,7 +886,7 @@ export default function AdminDashboard() {
                             </tr>
                           </thead>
                           <tbody style={{ fontSize: '14px', color: '#1d1d1f' }}>
-                            {filteredEquipment.map((item, idx) => {
+                            {paginatedEquipment.map((item, idx) => {
                               const isRequest = item.priceType === 'on_request';
                               const roiDays = !isRequest && item.price > 0 ? Math.ceil(item.purchasePrice / item.price) : 0;
                               let roiHealth = 'N/A';
@@ -901,7 +910,7 @@ export default function AdminDashboard() {
                               }
 
                               return (
-                                <tr key={item.id} style={{ borderBottom: idx < filteredEquipment.length - 1 ? '1px solid rgba(0,0,0,.04)' : 'none' }}>
+                                <tr key={item.id} style={{ borderBottom: idx < paginatedEquipment.length - 1 ? '1px solid rgba(0,0,0,.04)' : 'none' }}>
                                   <td style={{ padding: '18px 30px' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                       {item.image && (
@@ -977,6 +986,51 @@ export default function AdminDashboard() {
                   ) : (
                     <div style={{ textAlign: 'center', padding: '50px 20px', color: '#86868b' }}>
                       Aucun matériel dans le catalogue. Cliquez sur "Ajouter un matériel".
+                    </div>
+                  )}
+
+                  {/* Pagination controls */}
+                  {filteredEquipment.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '16px 30px', borderTop: '1px solid rgba(0,0,0,.06)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#6e6e73' }}>
+                        <span>Afficher</span>
+                        <select
+                          value={catalogPageSize}
+                          onChange={e => { setCatalogPageSize(Number(e.target.value)); setCatalogPage(1); }}
+                          style={{ padding: '5px 10px', borderRadius: '8px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '13px', fontFamily: 'inherit', backgroundColor: '#fff', cursor: 'pointer' }}
+                        >
+                          {[10, 25, 50].map(n => <option key={n} value={n}>{n}</option>)}
+                        </select>
+                        <span>par page — {filteredEquipment.length} résultat{filteredEquipment.length > 1 ? 's' : ''}</span>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <button
+                          onClick={() => setCatalogPage(p => Math.max(1, p - 1))}
+                          disabled={catalogPageClamped <= 1}
+                          style={{ padding: '6px 14px', borderRadius: '8px', border: '1px solid rgba(0,0,0,.12)', backgroundColor: catalogPageClamped <= 1 ? '#f5f5f7' : '#fff', color: catalogPageClamped <= 1 ? '#b0b0b5' : '#1d1d1f', cursor: catalogPageClamped <= 1 ? 'not-allowed' : 'pointer', fontSize: '13px', fontWeight: 600, fontFamily: 'inherit' }}
+                        >
+                          ← Précédent
+                        </button>
+
+                        {Array.from({ length: catalogTotalPages }, (_, i) => i + 1).map(p => (
+                          <button
+                            key={p}
+                            onClick={() => setCatalogPage(p)}
+                            style={{ padding: '6px 12px', borderRadius: '8px', border: `1px solid ${p === catalogPageClamped ? '#1d1d1f' : 'rgba(0,0,0,.12)'}`, backgroundColor: p === catalogPageClamped ? '#1d1d1f' : '#fff', color: p === catalogPageClamped ? '#fff' : '#1d1d1f', cursor: 'pointer', fontSize: '13px', fontWeight: 600, fontFamily: 'inherit', display: catalogTotalPages > 7 && p !== 1 && p !== catalogTotalPages && Math.abs(p - catalogPageClamped) > 2 ? 'none' : 'inline-flex' }}
+                          >
+                            {p}
+                          </button>
+                        ))}
+
+                        <button
+                          onClick={() => setCatalogPage(p => Math.min(catalogTotalPages, p + 1))}
+                          disabled={catalogPageClamped >= catalogTotalPages}
+                          style={{ padding: '6px 14px', borderRadius: '8px', border: '1px solid rgba(0,0,0,.12)', backgroundColor: catalogPageClamped >= catalogTotalPages ? '#f5f5f7' : '#fff', color: catalogPageClamped >= catalogTotalPages ? '#b0b0b5' : '#1d1d1f', cursor: catalogPageClamped >= catalogTotalPages ? 'not-allowed' : 'pointer', fontSize: '13px', fontWeight: 600, fontFamily: 'inherit' }}
+                        >
+                          Suivant →
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1273,398 +1327,162 @@ export default function AdminDashboard() {
               </div>
             )}
 
-            {activeTab === 'quotes' && (
+            {activeTab === 'quotes' && (() => {
+              // Group all quotes by client
+              const clientGroups: Record<string, { userId: string; userName: string; userEmail: string; quotes: any[] }> = {};
+              adminQuotes.forEach(q => {
+                if (!clientGroups[q.userId]) {
+                  clientGroups[q.userId] = { userId: q.userId, userName: q.userName, userEmail: q.userEmail, quotes: [] };
+                }
+                clientGroups[q.userId].quotes.push(q);
+              });
+              const clientList = Object.values(clientGroups)
+                .filter(g => clientSearch === '' ||
+                  g.userName.toLowerCase().includes(clientSearch.toLowerCase()) ||
+                  g.userEmail.toLowerCase().includes(clientSearch.toLowerCase()))
+                .sort((a, b) => {
+                  // Sort: clients with active docs first
+                  const aActive = a.quotes.filter(q => ['pending', 'modified_by_admin', 'pdf_pending'].includes(q.status)).length;
+                  const bActive = b.quotes.filter(q => ['pending', 'modified_by_admin', 'pdf_pending'].includes(q.status)).length;
+                  return bActive - aActive;
+                });
+
+              return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                <div style={{ backgroundColor: '#ffffff', border: '1px solid rgba(0,0,0,.08)', borderRadius: '24px', padding: '30px', boxShadow: '0 4px 20px rgba(0,0,0,.02)' }}>
-                  <h3 style={{ fontSize: '18px', fontWeight: 800, margin: '0 0 8px' }}>Demandes de Devis Client en Attente</h3>
-                  <p style={{ margin: '0 0 24px', fontSize: '14px', color: '#6e6e73' }}>
-                    Retrouvez ici toutes les demandes envoyées par vos clients et en cours d'évaluation.
-                  </p>
+                {/* Header */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
+                  <div>
+                    <h3 style={{ fontSize: '20px', fontWeight: 800, margin: '0 0 4px' }}>Dossiers Clients</h3>
+                    <p style={{ margin: 0, fontSize: '14px', color: '#6e6e73' }}>{Object.keys(clientGroups).length} client{Object.keys(clientGroups).length > 1 ? 's' : ''} · {adminQuotes.filter(q => q.status === 'pending').length} demande{adminQuotes.filter(q => q.status === 'pending').length > 1 ? 's' : ''} en attente</p>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Rechercher un client..."
+                    value={clientSearch}
+                    onChange={e => setClientSearch(e.target.value)}
+                    style={{ padding: '8px 18px', borderRadius: '980px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '13px', fontFamily: 'inherit', width: '240px', backgroundColor: '#f5f5f7' }}
+                  />
+                </div>
 
-                  {loadingQuotes ? (
-                    <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
-                      <Loader2 style={{ width: '32px', height: '32px', color: '#1d1d1f', animation: 'spin 1s linear infinite' }} />
-                    </div>
-                  ) : adminQuotes.filter(q => q.status === 'pending').length > 0 ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                      {adminQuotes.filter(q => q.status === 'pending').map((q) => {
-                        const isEditing = editingQuoteId === q.id;
+                {loadingQuotes ? (
+                  <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
+                    <Loader2 style={{ width: '32px', height: '32px', color: '#1d1d1f', animation: 'spin 1s linear infinite' }} />
+                  </div>
+                ) : clientList.length === 0 ? (
+                  <div style={{ backgroundColor: '#fff', border: '1px solid rgba(0,0,0,.08)', borderRadius: '24px', padding: '50px 20px', textAlign: 'center', color: '#86868b', fontSize: '14px' }}>
+                    {adminQuotes.length === 0 ? 'Aucun dossier client pour le moment.' : 'Aucun client ne correspond à la recherche.'}
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
+                    {clientList.map(group => {
+                      const pending = group.quotes.filter(q => q.status === 'pending').length;
+                      const modified = group.quotes.filter(q => q.status === 'modified_by_admin').length;
+                      const pdfPending = group.quotes.filter(q => q.status === 'pdf_pending').length;
+                      const validated = group.quotes.filter(q => q.status === 'validated').length;
+                      const cancelled = group.quotes.filter(q => q.status === 'cancelled').length;
+                      const activeCount = pending + modified + pdfPending;
+                      const lastQuote = group.quotes[0];
+                      const hasUrgent = pending > 0 || modified > 0;
 
-                        if (isEditing) {
-                          const { totalHT: liveHT, totalTTC: liveTTC, duration: liveDur, coeff: liveCoeff } = calculateEditTotals();
-                          return (
-                            <form key={q.id} onSubmit={handleSaveEditedQuote} style={{ border: '2px solid #0071e3', borderRadius: '16px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', backgroundColor: '#fff', boxShadow: '0 4px 24px rgba(0,113,227,.06)' }}>
-                              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
-                                <div>
-                                  <div style={{ fontWeight: 800, fontSize: '15px', color: '#0071e3' }}>Modification du Devis #{q.id}</div>
-                                  <div style={{ fontSize: '13px', color: '#86868b', marginTop: '2px' }}>
-                                    Client : <strong>{q.userName}</strong> ({q.userEmail})
-                                  </div>
-                                </div>
-                                <span style={{ fontSize: '11px', fontWeight: 700, padding: '4px 10px', borderRadius: '980px', backgroundColor: '#e8f1fd', color: '#0071e3', textTransform: 'uppercase' }}>
-                                  Mode Édition
+                      return (
+                        <Link
+                          key={group.userId}
+                          href={`/admin/client/${group.userId}`}
+                          style={{ textDecoration: 'none', display: 'block' }}
+                        >
+                          <div style={{
+                            backgroundColor: '#fff',
+                            border: `1px solid ${hasUrgent ? 'rgba(0,113,227,.3)' : 'rgba(0,0,0,.08)'}`,
+                            borderRadius: '20px',
+                            padding: '22px 24px',
+                            boxShadow: hasUrgent ? '0 4px 20px rgba(0,113,227,.06)' : '0 4px 20px rgba(0,0,0,.02)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '16px',
+                            transition: 'transform .15s, box-shadow .15s',
+                            cursor: 'pointer',
+                          }}
+                          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 28px rgba(0,0,0,.08)'; }}
+                          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = ''; (e.currentTarget as HTMLElement).style.boxShadow = hasUrgent ? '0 4px 20px rgba(0,113,227,.06)' : '0 4px 20px rgba(0,0,0,.02)'; }}
+                          >
+                            {/* Client header */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                              <div style={{ width: '44px', height: '44px', borderRadius: '50%', backgroundColor: '#1d1d1f', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 800, flexShrink: 0 }}>
+                                {group.userName.charAt(0).toUpperCase()}
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontWeight: 800, fontSize: '15px', color: '#1d1d1f', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{group.userName}</div>
+                                <div style={{ fontSize: '12px', color: '#86868b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{group.userEmail}</div>
+                              </div>
+                              {activeCount > 0 && (
+                                <span style={{ fontSize: '11px', fontWeight: 800, backgroundColor: '#0071e3', color: '#fff', padding: '3px 8px', borderRadius: '980px', flexShrink: 0 }}>
+                                  {activeCount} actif{activeCount > 1 ? 's' : ''}
                                 </span>
-                              </div>
-
-                              {/* Form fields for dates and notes */}
-                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                  <label style={{ fontSize: '12px', fontWeight: 600, color: '#1d1d1f' }}>Date de début</label>
-                                  <input
-                                    type="date"
-                                    value={editStartDate}
-                                    onChange={e => setEditStartDate(e.target.value)}
-                                    style={{ padding: '8px 12px', borderRadius: '980px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '13px', fontFamily: 'inherit' }}
-                                    required
-                                  />
-                                </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                  <label style={{ fontSize: '12px', fontWeight: 600, color: '#1d1d1f' }}>Date de fin</label>
-                                  <input
-                                    type="date"
-                                    value={editEndDate}
-                                    onChange={e => setEditEndDate(e.target.value)}
-                                    style={{ padding: '8px 12px', borderRadius: '980px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '13px', fontFamily: 'inherit' }}
-                                    required
-                                  />
-                                </div>
-                              </div>
-
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                <label style={{ fontSize: '12px', fontWeight: 600, color: '#1d1d1f' }}>Notes / Remarques du Devis</label>
-                                <textarea
-                                  rows={2}
-                                  value={editNotes}
-                                  onChange={e => setEditNotes(e.target.value)}
-                                  placeholder="Notes ou remarques du client / administrateur..."
-                                  style={{ padding: '10px 14px', borderRadius: '12px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '13px', fontFamily: 'inherit', resize: 'vertical' }}
-                                />
-                              </div>
-
-                              {/* Lignes de matériel */}
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                <span style={{ fontSize: '12px', fontWeight: 600, color: '#1d1d1f' }}>Lignes de Matériels :</span>
-                                <div style={{ border: '1px solid rgba(0,0,0,.08)', borderRadius: '12px', overflow: 'hidden' }}>
-                                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
-                                    <thead>
-                                      <tr style={{ backgroundColor: '#f5f5f7', borderBottom: '1px solid rgba(0,0,0,.06)', fontWeight: 600 }}>
-                                        <th style={{ padding: '10px 16px' }}>Matériel</th>
-                                        <th style={{ padding: '10px 16px' }}>Quantité</th>
-                                        <th style={{ padding: '10px 16px', textAlign: 'right' }}>Tarif (HT)</th>
-                                        <th style={{ padding: '10px 16px', width: '50px' }}></th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {editItems.map((it: any, idx: number) => (
-                                        <tr key={idx} style={{ borderBottom: idx < editItems.length - 1 ? '1px solid rgba(0,0,0,.04)' : 'none' }}>
-                                          <td style={{ padding: '10px 16px' }}><strong>{it.brand}</strong> - {it.name}</td>
-                                          <td style={{ padding: '10px 16px' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                              <button type="button" onClick={() => handleUpdateEditItemQty(it.id, -1)} style={{ border: '1px solid #d1d1d6', backgroundColor: '#fff', borderRadius: '4px', cursor: 'pointer', padding: '2px 6px', display: 'flex', alignItems: 'center', fontWeight: 600 }}>-</button>
-                                              <span style={{ fontWeight: 700, minWidth: '20px', textAlign: 'center' }}>{it.quantity}</span>
-                                              <button type="button" onClick={() => handleUpdateEditItemQty(it.id, 1)} style={{ border: '1px solid #d1d1d6', backgroundColor: '#fff', borderRadius: '4px', cursor: 'pointer', padding: '2px 6px', display: 'flex', alignItems: 'center', fontWeight: 600 }}>+</button>
-                                            </div>
-                                          </td>
-                                          <td style={{ padding: '10px 16px', textAlign: 'right' }}>
-                                            {it.priceType === 'on_request' ? (
-                                              <span style={{ color: '#86868b' }}>Sur devis</span>
-                                            ) : (
-                                              <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                                <input
-                                                  type="number"
-                                                  value={it.price}
-                                                  onChange={e => handleUpdateEditItemPrice(it.id, Number(e.target.value))}
-                                                  style={{ width: '75px', padding: '4px 8px', borderRadius: '6px', border: '1px solid rgba(0,0,0,.15)', outline: 'none', textAlign: 'right', fontSize: '13px' }}
-                                                  min="0"
-                                                  step="0.01"
-                                                />
-                                                <span>€</span>
-                                              </div>
-                                            )}
-                                          </td>
-                                          <td style={{ padding: '10px 16px', textAlign: 'center' }}>
-                                            <button type="button" onClick={() => handleRemoveEditItem(it.id)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#ef4444' }}>
-                                              <Trash2 style={{ width: '14px', height: '14px' }} />
-                                            </button>
-                                          </td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-
-                                {/* Add new line */}
-                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '4px' }}>
-                                  <select
-                                    value={editAddItemSelect}
-                                    onChange={e => setEditAddItemSelect(e.target.value)}
-                                    style={{ flex: 1, padding: '8px 12px', borderRadius: '980px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '13px' }}
-                                  >
-                                    <option value="">-- Choisir un matériel à rajouter --</option>
-                                    {equipment.map(e => (
-                                      <option key={e.id} value={e.id}>
-                                        {e.brand} - {e.name} ({e.priceType === 'on_request' ? 'Sur devis' : `${e.price} € ${e.priceTax}`})
-                                      </option>
-                                    ))}
-                                  </select>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleAddEditItem(editAddItemSelect)}
-                                    style={{ padding: '8px 18px', borderRadius: '980px', backgroundColor: '#1d1d1f', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '13px', whiteSpace: 'nowrap' }}
-                                  >
-                                    + Ajouter
-                                  </button>
-                                </div>
-
-                                {/* Discount / Global Promo */}
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '10px', maxWidth: '320px' }}>
-                                  <label style={{ fontSize: '12px', fontWeight: 600, color: '#1d1d1f', whiteSpace: 'nowrap' }}>Remise / Promo globale (%) :</label>
-                                  <input
-                                    type="number"
-                                    value={editDiscount}
-                                    onChange={e => setEditDiscount(Math.max(0, Math.min(100, Number(e.target.value))))}
-                                    style={{ width: '80px', padding: '6px 12px', borderRadius: '980px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', textAlign: 'center', fontSize: '13px' }}
-                                    min="0"
-                                    max="100"
-                                  />
-                                </div>
-                              </div>
-
-                              {/* Calculated Summary */}
-                              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '16px', borderTop: '1px solid rgba(0,0,0,.06)', paddingTop: '16px' }}>
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', fontSize: '13px', color: '#6e6e73' }}>
-                                  <div>Durée : <strong>{liveDur} jour{liveDur > 1 ? 's' : ''}</strong></div>
-                                  <div>Coeff : <strong>x{liveCoeff.toFixed(2)}</strong></div>
-                                  <div>Total Estimé HT : <strong style={{ color: '#1d1d1f', fontSize: '15px' }}>{liveHT.toLocaleString('fr-FR')} €</strong></div>
-                                  <div>Total TTC : <strong style={{ color: '#86868b' }}>{liveTTC.toLocaleString('fr-FR')} €</strong></div>
-                                </div>
-
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                  <button
-                                    type="submit"
-                                    disabled={quotesActionLoading === q.id}
-                                    style={{ padding: '10px 20px', borderRadius: '980px', backgroundColor: '#0071e3', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                                  >
-                                    {quotesActionLoading === q.id ? <Loader2 style={{ width: '14px', height: '14px', animation: 'spin 1s linear infinite' }} /> : 'Enregistrer'}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setEditingQuoteId(null)}
-                                    style={{ padding: '10px 20px', borderRadius: '980px', backgroundColor: '#e8e8ed', color: '#1d1d1f', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '13px' }}
-                                  >
-                                    Annuler
-                                  </button>
-                                </div>
-                              </div>
-                            </form>
-                          );
-                        }
-
-                        return (
-                          <div key={q.id} style={{ border: '1px solid rgba(0,0,0,.08)', borderRadius: '16px', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
-                              <div>
-                                <div style={{ fontWeight: 800, fontSize: '15px', color: '#1d1d1f' }}>Devis #{q.id}</div>
-                                <div style={{ fontSize: '13px', color: '#86868b', marginTop: '2px' }}>
-                                  Client : <strong>{q.userName}</strong> ({q.userEmail})
-                                </div>
-                              </div>
-                              <span style={{ fontSize: '11px', fontWeight: 700, padding: '4px 10px', borderRadius: '980px', backgroundColor: '#e8f1fd', color: '#0071e3', textTransform: 'uppercase' }}>
-                                En attente d'étude
-                              </span>
-                            </div>
-
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', backgroundColor: '#f5f5f7', borderRadius: '12px', padding: '16px', fontSize: '13px' }}>
-                              <div style={{ flex: '1 1 200px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                <span style={{ fontWeight: 700, color: '#6e6e73' }}>Période de location :</span>
-                                <span style={{ color: '#1d1d1f' }}>
-                                  du {new Date(q.startDate).toLocaleDateString('fr-FR')} au {new Date(q.endDate).toLocaleDateString('fr-FR')}
-                                </span>
-                              </div>
-                              {q.notes && (
-                                <div style={{ flex: '2 1 300px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                  <span style={{ fontWeight: 700, color: '#6e6e73' }}>Notes client :</span>
-                                  <span style={{ color: '#1d1d1f', fontStyle: 'italic' }}>"{q.notes}"</span>
-                                </div>
                               )}
                             </div>
 
-                            {/* Gear details */}
-                            <div style={{ border: '1px solid rgba(0,0,0,.04)', borderRadius: '12px', overflow: 'hidden' }}>
-                              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
-                                <thead>
-                                  <tr style={{ backgroundColor: '#f5f5f7', borderBottom: '1px solid rgba(0,0,0,.06)', fontWeight: 600 }}>
-                                    <th style={{ padding: '10px 16px' }}>Matériel</th>
-                                    <th style={{ padding: '10px 16px' }}>Quantité</th>
-                                    <th style={{ padding: '10px 16px', textAlign: 'right' }}>Tarif Unitaire (HT)</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {q.items.map((it: any, index: number) => (
-                                    <tr key={index} style={{ borderBottom: index < q.items.length - 1 ? '1px solid rgba(0,0,0,.04)' : 'none' }}>
-                                      <td style={{ padding: '10px 16px' }}><strong>{it.brand}</strong> - {it.name}</td>
-                                      <td style={{ padding: '10px 16px' }}>{it.quantity}</td>
-                                      <td style={{ padding: '10px 16px', textAlign: 'right' }}>
-                                        {it.priceType === 'on_request' ? 'Sur devis' : `${it.price.toLocaleString('fr-FR')} €`}
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
+                            {/* Status badges */}
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                              {pending > 0 && <span style={{ fontSize: '11px', fontWeight: 700, padding: '3px 10px', borderRadius: '980px', backgroundColor: '#fff3cd', color: '#856404' }}>{pending} en attente</span>}
+                              {modified > 0 && <span style={{ fontSize: '11px', fontWeight: 700, padding: '3px 10px', borderRadius: '980px', backgroundColor: '#e8f1fd', color: '#0071e3' }}>{modified} modifié{modified > 1 ? 's' : ''}</span>}
+                              {pdfPending > 0 && <span style={{ fontSize: '11px', fontWeight: 700, padding: '3px 10px', borderRadius: '980px', backgroundColor: '#f0fdf4', color: '#15803d' }}>{pdfPending} PDF requis</span>}
+                              {validated > 0 && <span style={{ fontSize: '11px', fontWeight: 700, padding: '3px 10px', borderRadius: '980px', backgroundColor: '#f5f5f7', color: '#6e6e73' }}>{validated} validé{validated > 1 ? 's' : ''}</span>}
+                              {cancelled > 0 && <span style={{ fontSize: '11px', fontWeight: 700, padding: '3px 10px', borderRadius: '980px', backgroundColor: '#fef2f2', color: '#ef4444' }}>{cancelled} annulé{cancelled > 1 ? 's' : ''}</span>}
+                              {group.quotes.length === 0 && <span style={{ fontSize: '11px', color: '#86868b' }}>Aucun document</span>}
                             </div>
 
-                            {/* Pricing summary & actions */}
-                            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '16px', borderTop: '1px solid rgba(0,0,0,.06)', paddingTop: '16px' }}>
-                              <div style={{ display: 'flex', gap: '20px', fontSize: '14px' }}>
-                                <div>
-                                  <span style={{ color: '#86868b' }}>Total Estimé HT : </span>
-                                  <strong style={{ color: '#1d1d1f', fontSize: '16px' }}>{q.totalHT.toLocaleString('fr-FR')} €</strong>
-                                </div>
-                                <div>
-                                  <span style={{ color: '#86868b' }}>Total TTC : </span>
-                                  <strong style={{ color: '#86868b' }}>{q.totalTTC.toLocaleString('fr-FR')} €</strong>
-                                </div>
-                              </div>
-
-                              <div style={{ display: 'flex', gap: '10px' }}>
-                                <button
-                                  onClick={() => handleUpdateQuoteStatus(q.id, 'validated')}
-                                  disabled={quotesActionLoading === q.id}
-                                  style={{
-                                    padding: '10px 20px',
-                                    borderRadius: '980px',
-                                    backgroundColor: '#1db954',
-                                    color: '#fff',
-                                    border: 'none',
-                                    cursor: 'pointer',
-                                    fontWeight: 600,
-                                    fontSize: '13px',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '6px'
-                                  }}
-                                >
-                                  {quotesActionLoading === q.id ? <Loader2 style={{ width: '14px', height: '14px', animation: 'spin 1s linear infinite' }} /> : 'Valider'}
-                                </button>
-
-                                <button
-                                  onClick={() => startEditingQuote(q)}
-                                  disabled={quotesActionLoading === q.id}
-                                  style={{
-                                    padding: '10px 20px',
-                                    borderRadius: '980px',
-                                    backgroundColor: '#f5f5f7',
-                                    color: '#1d1d1f',
-                                    border: 'none',
-                                    cursor: 'pointer',
-                                    fontWeight: 600,
-                                    fontSize: '13px',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '6px'
-                                  }}
-                                >
-                                  Modifier
-                                </button>
-
-                                <button
-                                  onClick={() => handleUpdateQuoteStatus(q.id, 'cancelled')}
-                                  disabled={quotesActionLoading === q.id}
-                                  style={{
-                                    padding: '10px 20px',
-                                    borderRadius: '980px',
-                                    backgroundColor: 'transparent',
-                                    color: '#ef4444',
-                                    border: '1px solid #ef4444',
-                                    cursor: 'pointer',
-                                    fontWeight: 600,
-                                    fontSize: '13px',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: '6px'
-                                  }}
-                                >
-                                  Refuser
-                                </button>
-                              </div>
+                            {/* Last activity */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(0,0,0,.05)', paddingTop: '12px', fontSize: '12px', color: '#86868b' }}>
+                              <span>Dernier doc : {lastQuote ? new Date(lastQuote.updatedAt).toLocaleDateString('fr-FR') : '—'}</span>
+                              <span style={{ color: '#0071e3', fontWeight: 600 }}>Ouvrir le dossier →</span>
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div style={{ textAlign: 'center', padding: '40px 20px', backgroundColor: '#f5f5f7', borderRadius: '16px', color: '#86868b', fontSize: '14px' }}>
-                      Aucun devis en attente d'étude pour le moment.
-                    </div>
-                  )}
-                </div>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
 
-                {/* HISTORICAL QUOTES SECTION */}
-                <div style={{ backgroundColor: '#ffffff', border: '1px solid rgba(0,0,0,.08)', borderRadius: '24px', padding: '30px', boxShadow: '0 4px 20px rgba(0,0,0,.02)' }}>
-                  <h3 style={{ fontSize: '18px', fontWeight: 800, margin: '0 0 20px' }}>Historique des Devis Traités</h3>
-                  
-                  {loadingQuotes ? (
-                    <div style={{ display: 'flex', justifyContent: 'center', padding: '20px' }}>
-                      <Loader2 style={{ width: '24px', height: '24px', color: '#1d1d1f', animation: 'spin 1s linear infinite' }} />
-                    </div>
-                  ) : adminQuotes.filter(q => q.status !== 'pending' && q.status !== 'draft').length > 0 ? (
-                    <div style={{ overflowX: 'auto' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '600px', fontSize: '13px' }}>
-                        <thead>
-                          <tr style={{ borderBottom: '1px solid rgba(0,0,0,.06)', backgroundColor: '#f5f5f7', fontWeight: 700, color: '#86868b', textTransform: 'uppercase', letterSpacing: '.06em' }}>
-                            <th style={{ padding: '14px 20px' }}>ID / Client</th>
-                            <th style={{ padding: '14px 20px' }}>Période</th>
-                            <th style={{ padding: '14px 20px' }}>Articles</th>
-                            <th style={{ padding: '14px 20px' }}>Total (HT)</th>
-                            <th style={{ padding: '14px 20px' }}>Statut</th>
+                {/* Processed quotes archive */}
+                {!loadingQuotes && adminQuotes.filter(q => q.status !== 'pending' && q.status !== 'draft' && q.status !== 'modified_by_admin' && q.status !== 'pdf_pending').length > 0 && (
+                <div style={{ backgroundColor: '#ffffff', border: '1px solid rgba(0,0,0,.08)', borderRadius: '24px', padding: '24px 30px', boxShadow: '0 4px 20px rgba(0,0,0,.02)' }}>
+                  <h3 style={{ fontSize: '16px', fontWeight: 800, margin: '0 0 16px', color: '#6e6e73' }}>Historique des Devis Traités</h3>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '600px', fontSize: '13px' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid rgba(0,0,0,.06)', backgroundColor: '#f5f5f7', fontWeight: 700, color: '#86868b', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+                          <th style={{ padding: '12px 20px' }}>ID / Client</th>
+                          <th style={{ padding: '12px 20px' }}>Période</th>
+                          <th style={{ padding: '12px 20px' }}>Total HT</th>
+                          <th style={{ padding: '12px 20px' }}>Statut</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {adminQuotes.filter(q => q.status !== 'pending' && q.status !== 'draft' && q.status !== 'modified_by_admin' && q.status !== 'pdf_pending').map((q) => (
+                          <tr key={q.id} style={{ borderBottom: '1px solid rgba(0,0,0,.04)' }}>
+                            <td style={{ padding: '14px 20px' }}>
+                              <div style={{ fontWeight: 700 }}>{q.id}</div>
+                              <div style={{ fontSize: '11px', color: '#86868b' }}>{q.userName}</div>
+                            </td>
+                            <td style={{ padding: '14px 20px', fontSize: '12px', color: '#6e6e73' }}>
+                              {new Date(q.startDate).toLocaleDateString('fr-FR')} → {new Date(q.endDate).toLocaleDateString('fr-FR')}
+                            </td>
+                            <td style={{ padding: '14px 20px', fontWeight: 700 }}>{q.totalHT.toLocaleString('fr-FR')} €</td>
+                            <td style={{ padding: '14px 20px' }}>
+                              <span style={{ fontSize: '11px', fontWeight: 700, padding: '3px 10px', borderRadius: '980px', backgroundColor: q.status === 'validated' ? '#e2fbe8' : '#fef2f2', color: q.status === 'validated' ? '#1db954' : '#ef4444' }}>
+                                {q.status === 'validated' ? 'Validé' : 'Annulé'}
+                              </span>
+                            </td>
                           </tr>
-                        </thead>
-                        <tbody>
-                          {adminQuotes.filter(q => q.status !== 'pending' && q.status !== 'draft').map((q) => (
-                            <tr key={q.id} style={{ borderBottom: '1px solid rgba(0,0,0,.04)' }}>
-                              <td style={{ padding: '16px 20px' }}>
-                                <div style={{ fontWeight: 800 }}>{q.id}</div>
-                                <div style={{ fontSize: '11px', color: '#86868b', marginTop: '2px' }}>{q.userName}</div>
-                              </td>
-                              <td style={{ padding: '16px 20px' }}>
-                                <div>Du {new Date(q.startDate).toLocaleDateString('fr-FR')}</div>
-                                <div style={{ fontSize: '11px', color: '#86868b', marginTop: '2px' }}>Au {new Date(q.endDate).toLocaleDateString('fr-FR')}</div>
-                              </td>
-                              <td style={{ padding: '16px 20px' }}>
-                                <div style={{ fontWeight: 600 }}>{q.items.reduce((sum: number, it: any) => sum + it.quantity, 0)} articles</div>
-                                <div style={{ fontSize: '11px', color: '#86868b', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '180px' }}>
-                                  {q.items.map((it: any) => `${it.name} (x${it.quantity})`).join(', ')}
-                                </div>
-                              </td>
-                              <td style={{ padding: '16px 20px', fontWeight: 700 }}>
-                                {q.totalHT.toLocaleString('fr-FR')} €
-                              </td>
-                              <td style={{ padding: '16px 20px' }}>
-                                <span style={{
-                                  display: 'inline-flex',
-                                  padding: '4px 12px',
-                                  borderRadius: '980px',
-                                  fontSize: '11px',
-                                  fontWeight: 700,
-                                  backgroundColor: q.status === 'validated' ? '#e2fbe8' : '#fef2f2',
-                                  color: q.status === 'validated' ? '#1db954' : '#ef4444'
-                                }}>
-                                  {q.status === 'validated' ? 'Validé' : 'Annulé'}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div style={{ textAlign: 'center', padding: '24px', color: '#86868b' }}>
-                      Aucun devis traité archivé.
-                    </div>
-                  )}
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
+                )}
               </div>
-            )}
+              );
+            })()}
 
           </div>
         )}
@@ -1720,8 +1538,75 @@ export default function AdminDashboard() {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: 600 }}>URL de l'image (optionnel)</label>
-                  <input type="text" placeholder="ex: https://images.unsplash.com/photo-..." value={image} onChange={e => setImage(e.target.value)} style={{ padding: '12px 18px', borderRadius: '980px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '14px' }} />
+                  <label style={{ fontSize: '13px', fontWeight: 600 }}>Image de l'équipement (URL ou fichier)</label>
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <input
+                      type="text"
+                      placeholder="Coller l'URL de l'image ou utiliser le bouton à droite..."
+                      value={image.startsWith('data:') ? 'Image chargée depuis un fichier local' : image}
+                      disabled={image.startsWith('data:')}
+                      onChange={e => setImage(e.target.value)}
+                      style={{ flex: 1, padding: '12px 18px', borderRadius: '980px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '14px' }}
+                    />
+                    <input
+                      type="file"
+                      accept="image/*"
+                      id="equipment-image-file-add"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            setImage(reader.result as string);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                      style={{ display: 'none' }}
+                    />
+                    <label
+                      htmlFor="equipment-image-file-add"
+                      style={{
+                        padding: '12px 20px',
+                        borderRadius: '980px',
+                        backgroundColor: '#1d1d1f',
+                        color: '#fff',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                        transition: 'background 0.2s'
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.backgroundColor = '#0071e3'}
+                      onMouseLeave={e => e.currentTarget.style.backgroundColor = '#1d1d1f'}
+                    >
+                      Choisir un fichier
+                    </label>
+                    {image && (
+                      <button
+                        type="button"
+                        onClick={() => setImage('')}
+                        style={{
+                          padding: '12px 20px',
+                          borderRadius: '980px',
+                          backgroundColor: '#f5f5f7',
+                          color: '#ef4444',
+                          border: '1px solid #fee2e2',
+                          fontSize: '13px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        Effacer l'image
+                      </button>
+                    )}
+                  </div>
+                  {image && (
+                    <div style={{ marginTop: '10px', position: 'relative', width: '120px', height: '90px', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(0,0,0,.08)' }}>
+                      <img src={image} alt="Aperçu" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    </div>
+                  )}
                 </div>
 
                 {/* Price structure settings */}
@@ -1938,8 +1823,75 @@ export default function AdminDashboard() {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: 600 }}>URL de l'image (optionnel)</label>
-                  <input type="text" placeholder="ex: https://images.unsplash.com/photo-..." value={image} onChange={e => setImage(e.target.value)} style={{ padding: '12px 18px', borderRadius: '980px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '14px' }} />
+                  <label style={{ fontSize: '13px', fontWeight: 600 }}>Image de l'équipement (URL ou fichier)</label>
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <input
+                      type="text"
+                      placeholder="Coller l'URL de l'image ou utiliser le bouton à droite..."
+                      value={image.startsWith('data:') ? 'Image chargée depuis un fichier local' : image}
+                      disabled={image.startsWith('data:')}
+                      onChange={e => setImage(e.target.value)}
+                      style={{ flex: 1, padding: '12px 18px', borderRadius: '980px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '14px' }}
+                    />
+                    <input
+                      type="file"
+                      accept="image/*"
+                      id="equipment-image-file-edit"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            setImage(reader.result as string);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                      style={{ display: 'none' }}
+                    />
+                    <label
+                      htmlFor="equipment-image-file-edit"
+                      style={{
+                        padding: '12px 20px',
+                        borderRadius: '980px',
+                        backgroundColor: '#1d1d1f',
+                        color: '#fff',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                        transition: 'background 0.2s'
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.backgroundColor = '#0071e3'}
+                      onMouseLeave={e => e.currentTarget.style.backgroundColor = '#1d1d1f'}
+                    >
+                      Choisir un fichier
+                    </label>
+                    {image && (
+                      <button
+                        type="button"
+                        onClick={() => setImage('')}
+                        style={{
+                          padding: '12px 20px',
+                          borderRadius: '980px',
+                          backgroundColor: '#f5f5f7',
+                          color: '#ef4444',
+                          border: '1px solid #fee2e2',
+                          fontSize: '13px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        Effacer l'image
+                      </button>
+                    )}
+                  </div>
+                  {image && (
+                    <div style={{ marginTop: '10px', position: 'relative', width: '120px', height: '90px', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(0,0,0,.08)' }}>
+                      <img src={image} alt="Aperçu" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    </div>
+                  )}
                 </div>
 
                 {/* Price structure settings */}

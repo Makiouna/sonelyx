@@ -6,22 +6,16 @@ import Link from 'next/link';
 import { authClient } from '@/lib/auth-client';
 import Header from '@/components/header';
 import Footer from '@/components/footer';
-import { 
-  Loader2, 
-  ChevronLeft, 
-  FileText, 
-  Trash2, 
-  User, 
-  Mail, 
-  Calendar, 
-  Sliders, 
-  Download, 
-  Upload, 
-  Check, 
-  AlertTriangle, 
-  FileCheck,
+import {
+  Loader2,
+  ChevronLeft,
+  Trash2,
+  Mail,
+  Calendar,
+  Download,
+  Upload,
+  AlertTriangle,
   Percent,
-  XCircle
 } from 'lucide-react';
 
 interface EquipmentItem {
@@ -56,6 +50,7 @@ interface Quote {
   id: string;
   userId: string;
   status: 'draft' | 'pending' | 'modified_by_admin' | 'pdf_pending' | 'validated' | 'cancelled';
+  previousVersion?: string | null;
   startDate: string;
   endDate: string;
   notes: string | null;
@@ -114,8 +109,8 @@ export default function ClientFolderPage({ params }: PageProps) {
   const [editDiscount, setEditDiscount] = useState(0);
   const [editAddItemSelect, setEditAddItemSelect] = useState('');
 
-  // PDF attachment state
-  const [pdfInputMap, setPdfInputMap] = useState<{ [quoteId: string]: string }>({});
+  // PDF file upload state
+  const [pdfFileMap, setPdfFileMap] = useState<{ [quoteId: string]: File | null }>({});
 
   // Security check on load
   useEffect(() => {
@@ -148,7 +143,7 @@ export default function ClientFolderPage({ params }: PageProps) {
       const eqRes = await fetch('/api/equipment');
       const eqData = await eqRes.json();
       if (eqData.success) {
-        setEquipment(eqData.equipment);
+        setEquipment(eqData.items);
       }
 
       // 3. Fetch client details from users endpoint
@@ -198,32 +193,30 @@ export default function ClientFolderPage({ params }: PageProps) {
     }
   };
 
-  const handleAttachPdf = async (quoteId: string) => {
-    const url = pdfInputMap[quoteId];
-    if (!url || !url.trim()) {
-      alert("Veuillez renseigner l'URL du devis PDF.");
+  const handleUploadPdf = async (quoteId: string) => {
+    const file = pdfFileMap[quoteId];
+    if (!file) {
+      alert('Veuillez sélectionner un fichier PDF.');
       return;
     }
     setActionLoading(quoteId);
     try {
-      const res = await fetch(`/api/quotes/${quoteId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          pdfUrl: url.trim(),
-          status: 'validated' // transitions to fully validated now that paper PDF is attached!
-        })
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch(`/api/quotes/${quoteId}/upload-pdf`, {
+        method: 'POST',
+        body: formData,
       });
       const data = await res.json();
       if (data.success) {
-        setPdfInputMap(prev => ({ ...prev, [quoteId]: '' }));
+        setPdfFileMap(prev => ({ ...prev, [quoteId]: null }));
         fetchClientData();
       } else {
         alert(data.error || 'Une erreur est survenue.');
       }
     } catch (e) {
       console.error(e);
-      alert('Erreur.');
+      alert('Erreur lors de l\'upload du PDF.');
     } finally {
       setActionLoading(null);
     }
@@ -344,7 +337,7 @@ export default function ClientFolderPage({ params }: PageProps) {
     return { totalHT, totalTTC, duration, coeff };
   };
 
-  const handleSaveEdit = async (e: React.FormEvent) => {
+  const handleSaveEdit = async (e: React.SyntheticEvent) => {
     e.preventDefault();
     if (!editingQuoteId) return;
 
@@ -688,32 +681,40 @@ export default function ClientFolderPage({ params }: PageProps) {
 
                 // Normal template view
                 return (
-                  <div key={q.id} style={{ backgroundColor: '#ffffff', border: '1px solid rgba(0,0,0,.08)', borderRadius: '20px', padding: '26px', display: 'flex', flexDirection: 'column', gap: '16px', boxShadow: '0 4px 18px rgba(0,0,0,.01)' }}>
+                  <div key={q.id} style={{ backgroundColor: '#ffffff', border: `1px solid ${q.status === 'pdf_pending' ? 'rgba(217,119,6,.35)' : 'rgba(0,0,0,.08)'}`, borderRadius: '20px', overflow: 'hidden', boxShadow: q.status === 'pdf_pending' ? '0 0 0 3px rgba(217,119,6,.08)' : '0 4px 18px rgba(0,0,0,.01)' }}>
+                    {/* Banner for pdf_pending */}
+                    {q.status === 'pdf_pending' && (
+                      <div style={{ backgroundColor: '#fef3c7', borderBottom: '1px solid rgba(217,119,6,.2)', padding: '10px 26px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Upload style={{ width: '16px', height: '16px', color: '#b45309', flexShrink: 0 }} />
+                        <span style={{ fontSize: '13px', fontWeight: 700, color: '#92400e' }}>Action requise — Envoi du PDF en cours. Uploadez le document signé ci-dessous.</span>
+                      </div>
+                    )}
+                    <div style={{ padding: '26px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
                     <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
                       <div>
                         <div style={{ fontWeight: 800, fontSize: '15px' }}>Devis #{q.id}</div>
                         <div style={{ fontSize: '12px', color: '#86868b', marginTop: '2px' }}>Demandé le {new Date(q.createdAt).toLocaleDateString('fr-FR')}</div>
                       </div>
-                      
+
                       {/* State badge */}
                       <span style={{
                         fontSize: '11px',
                         fontWeight: 700,
                         padding: '4px 12px',
                         borderRadius: '980px',
-                        backgroundColor: 
-                          q.status === 'pending' ? '#fff3cd' : 
-                          q.status === 'modified_by_admin' ? '#e8f1fd' : 
-                          '#d1e7dd',
-                        color: 
-                          q.status === 'pending' ? '#856404' : 
-                          q.status === 'modified_by_admin' ? '#0071e3' : 
-                          '#0f5132',
+                        backgroundColor:
+                          q.status === 'pending' ? '#fff3cd' :
+                          q.status === 'modified_by_admin' ? '#e8f1fd' :
+                          '#fef3c7',
+                        color:
+                          q.status === 'pending' ? '#856404' :
+                          q.status === 'modified_by_admin' ? '#0071e3' :
+                          '#b45309',
                         textTransform: 'uppercase'
                       }}>
                         {q.status === 'pending' && "En attente d'étude"}
                         {q.status === 'modified_by_admin' && "Modifié (validation client requise)"}
-                        {q.status === 'pdf_pending' && "Envoi de devis en cours (PDF requis)"}
+                        {q.status === 'pdf_pending' && "Envoi de devis en cours"}
                       </span>
                     </div>
 
@@ -803,10 +804,17 @@ export default function ClientFolderPage({ params }: PageProps) {
                         )}
 
                         {q.status === 'modified_by_admin' && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                             <span style={{ fontSize: '12px', color: '#6e6e73', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                              <AlertTriangle style={{ width: '14px', height: '14px', color: '#0071e3' }} /> Devis modifié. En attente de validation par le client.
+                              <AlertTriangle style={{ width: '14px', height: '14px', color: '#b78103' }} /> Modifié. En attente client.
                             </span>
+                            <button
+                              onClick={() => handleUpdateStatus(q.id, 'pdf_pending')}
+                              disabled={actionLoading === q.id}
+                              style={{ padding: '8px 16px', borderRadius: '980px', backgroundColor: '#1db954', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                            >
+                              {actionLoading === q.id ? <Loader2 style={{ width: '12px', height: '12px', animation: 'spin 1s linear infinite' }} /> : 'Valider'}
+                            </button>
                             <button
                               onClick={() => startEditing(q)}
                               disabled={actionLoading === q.id}
@@ -814,31 +822,39 @@ export default function ClientFolderPage({ params }: PageProps) {
                             >
                               Modifier à nouveau
                             </button>
+                            <button
+                              onClick={() => handleUpdateStatus(q.id, 'cancelled')}
+                              disabled={actionLoading === q.id}
+                              style={{ padding: '8px 16px', borderRadius: '980px', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #ef4444', cursor: 'pointer', fontWeight: 600, fontSize: '12px' }}
+                            >
+                              Annuler le devis
+                            </button>
                           </div>
                         )}
 
                         {q.status === 'pdf_pending' && (
-                          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px', backgroundColor: '#e8f1fd', borderRadius: '16px', padding: '10px 16px', border: '1px solid rgba(0,113,227,.12)' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 700, color: '#0071e3' }}>
-                              <Upload style={{ width: '16px', height: '16px' }} /> Déposer le devis PDF final :
+                          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px', backgroundColor: '#fff8ed', borderRadius: '16px', padding: '12px 16px', border: '1px solid rgba(234,179,8,.25)', width: '100%' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 700, color: '#b45309', flexBasis: '100%' }}>
+                              <Upload style={{ width: '16px', height: '16px' }} /> Uploader le fichier PDF du devis signé :
                             </div>
                             <input
-                              type="text"
-                              placeholder="URL du document PDF (ex: https://...)"
-                              value={pdfInputMap[q.id] || ''}
-                              onChange={e => setPdfInputMap(prev => ({ ...prev, [q.id]: e.target.value }))}
-                              style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid rgba(0,0,0,.15)', outline: 'none', fontSize: '12px', minWidth: '220px' }}
+                              type="file"
+                              accept="application/pdf"
+                              onChange={e => setPdfFileMap(prev => ({ ...prev, [q.id]: e.target.files?.[0] ?? null }))}
+                              style={{ fontSize: '12px', flex: 1, minWidth: '200px', cursor: 'pointer' }}
                             />
                             <button
-                              onClick={() => handleAttachPdf(q.id)}
-                              disabled={actionLoading === q.id}
-                              style={{ padding: '6px 14px', borderRadius: '8px', backgroundColor: '#0071e3', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '12px' }}
+                              onClick={() => handleUploadPdf(q.id)}
+                              disabled={actionLoading === q.id || !pdfFileMap[q.id]}
+                              style={{ padding: '7px 16px', borderRadius: '980px', backgroundColor: pdfFileMap[q.id] ? '#d97706' : '#e5e7eb', color: pdfFileMap[q.id] ? '#fff' : '#9ca3af', border: 'none', cursor: pdfFileMap[q.id] ? 'pointer' : 'default', fontWeight: 700, fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '5px', transition: 'background .15s', flexShrink: 0 }}
                             >
-                              {actionLoading === q.id ? <Loader2 style={{ width: '12px', height: '12px', animation: 'spin 1s linear infinite' }} /> : 'Envoyer'}
+                              {actionLoading === q.id ? <Loader2 style={{ width: '12px', height: '12px', animation: 'spin 1s linear infinite' }} /> : <Upload style={{ width: '12px', height: '12px' }} />}
+                              Envoyer le PDF
                             </button>
                           </div>
                         )}
                       </div>
+                    </div>
                     </div>
                   </div>
                 );
@@ -886,7 +902,7 @@ export default function ClientFolderPage({ params }: PageProps) {
                         <td style={{ padding: '16px 20px', textAlign: 'center' }}>
                           {q.pdfUrl ? (
                             <a
-                              href={q.pdfUrl}
+                              href={`/api/quotes/${q.id}/pdf`}
                               target="_blank"
                               rel="noreferrer"
                               style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '8px', backgroundColor: '#e2fbe8', color: '#1db954', textDecoration: 'none', fontWeight: 700, fontSize: '12px' }}

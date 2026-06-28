@@ -89,6 +89,8 @@ export const quote = pgTable('quote', {
   totalTTC: doublePrecision('totalTTC').notNull(),
   pdfUrl: text('pdfUrl'), // link to paper PDF
   discount: doublePrecision('discount').default(0).notNull(), // global promo discount percentage
+  previousVersion: text('previousVersion'), // JSON snapshot of quote state before admin modification
+  clientRefusalNote: text('clientRefusalNote'), // client message when refusing admin modifications
   createdAt: timestamp('createdAt').notNull(),
   updatedAt: timestamp('updatedAt').notNull(),
 });

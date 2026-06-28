@@ -22,10 +22,12 @@ export async function GET() {
       .where(eq(quoteTable.userId, session.user.id))
       .orderBy(desc(quoteTable.createdAt));
 
-    // Parse the items JSON string for convenience
-    const parsedQuotes = quotes.map(q => ({
+    // Parse items and strip the raw pdfUrl — client downloads via the /api/quotes/[id]/pdf proxy
+    const parsedQuotes = quotes.map(({ pdfUrl, previousVersion, ...q }) => ({
       ...q,
       items: JSON.parse(q.items),
+      hasPdf: !!pdfUrl,
+      previousVersion: previousVersion ?? null,
     }));
 
     return NextResponse.json({ success: true, quotes: parsedQuotes });
