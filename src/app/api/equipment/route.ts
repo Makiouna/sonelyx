@@ -3,13 +3,14 @@ import { headers } from 'next/headers';
 import { auth } from '@/lib/auth';
 import { db } from '@/db';
 import { equipment as equipmentTable, setting as settingTable } from '@/db/schema';
+import { getEquipmentWithQuantity, syncProductItems } from '@/db/queries';
 import { eq } from 'drizzle-orm';
 import { CATALOGUE } from '@/lib/catalogue-data';
 
 export async function GET() {
   try {
-    // 1. Fetch items from database
-    let items = await db.select().from(equipmentTable);
+    // 1. Fetch items from database with calculated quantity
+    let items = await getEquipmentWithQuantity();
 
     // 2. Auto-seed if the table is empty
     if (items.length === 0) {
@@ -56,13 +57,20 @@ export async function GET() {
           priceType: 'numeric',
           priceTax: 'HT',
           purchasePrice: purchasePrice,
-          quantity: quantity,
+          initialQty: quantity,
           image: null,
         };
       });
 
-      await db.insert(equipmentTable).values(seededCatalogue);
-      items = await db.select().from(equipmentTable);
+      // Insert equipment items (without initialQty)
+      await db.insert(equipmentTable).values(seededCatalogue.map(({ initialQty, ...rest }) => rest));
+
+      // Seed product items for each seeded equipment
+      for (const item of seededCatalogue) {
+        await syncProductItems(item.id, item.initialQty);
+      }
+
+      items = await getEquipmentWithQuantity();
     }
 
     // 2.5 Fetch dynamic TVA rate
@@ -170,9 +178,11 @@ export async function POST(request: Request) {
       priceType: priceType || 'numeric',
       priceTax: priceTax || 'HT',
       purchasePrice: Number(purchasePrice) || 0,
-      quantity: Number(quantity) || 1,
       image: image || null,
     });
+
+    // 5. Create product items matching requested quantity
+    await syncProductItems(id, Number(quantity) || 1);
 
     return NextResponse.json({ success: true, message: 'Équipement ajouté au catalogue.' });
   } catch (error: any) {

@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import { auth } from '@/lib/auth';
 import { db } from '@/db';
-import { quote as quoteTable, equipment as equipmentTable, setting as settingTable } from '@/db/schema';
+import { quote as quoteTable, setting as settingTable } from '@/db/schema';
+import { getEquipmentWithQuantity } from '@/db/queries';
 import { eq, desc } from 'drizzle-orm';
 
 // GET: Returns the logged-in user's quotes
@@ -93,8 +94,8 @@ export async function POST(request: Request) {
       .limit(1);
     const coeffSemaine = coeffSemaineSetting.length > 0 ? Number(coeffSemaineSetting[0].value) : 3.0;
 
-    // 2. Fetch equipment details from DB
-    const equipmentItems = await db.select().from(equipmentTable);
+    // 2. Fetch equipment details from DB with calculated quantity
+    const equipmentItems = await getEquipmentWithQuantity();
     
     // 3. Construct snapshot items list and calculate daily totals
     let dailyHT = 0;

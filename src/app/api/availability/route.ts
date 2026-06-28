@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/db';
-import { quote as quoteTable, equipment as equipmentTable } from '@/db/schema';
+import { quote as quoteTable } from '@/db/schema';
+import { getEquipmentWithQuantity } from '@/db/queries';
 import { eq } from 'drizzle-orm';
 
 // GET /api/availability?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
@@ -15,8 +16,8 @@ export async function GET(request: Request) {
       return NextResponse.json({ success: false, error: 'startDate et endDate requis.' }, { status: 400 });
     }
 
-    // Fetch all equipment (total stock)
-    const allEquipment = await db.select().from(equipmentTable);
+    // Fetch all equipment (total stock) with calculated quantity
+    const allEquipment = await getEquipmentWithQuantity();
 
     // Fetch all locked quotes
     const lockedQuotes = await db

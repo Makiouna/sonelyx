@@ -22,8 +22,10 @@ import {
   Receipt,
   Lock,
   PackageCheck,
+  Camera,
 } from 'lucide-react';
 import { groupQuotesByProject, getProjectStatus, projectStatusLabel, projectStatusColors } from '@/lib/project-grouping';
+import ScannerModal from '@/components/scanner-modal';
 
 interface EquipmentItem {
   id: string;
@@ -96,6 +98,59 @@ export default function ClientFolderPage({ params }: PageProps) {
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [equipment, setEquipment] = useState<EquipmentItem[]>([]);
   const [tvaRate, setTvaRate] = useState(20);
+
+  // Logistics states
+  const [projectTabs, setProjectTabs] = useState<Record<string, 'docs' | 'logistics'>>({});
+  const [logisticsData, setLogisticsData] = useState<Record<string, { reserved: any[], scanned: any[] }>>({});
+  const [loadingLogistics, setLoadingLogistics] = useState<Record<string, boolean>>({});
+  const [scannerAction, setScannerAction] = useState<Record<string, 'check-out' | 'check-in'>>({});
+  const [activeScannerQuoteId, setActiveScannerQuoteId] = useState<string | null>(null);
+  const [isLogisticsScannerOpen, setIsLogisticsScannerOpen] = useState(false);
+
+  const fetchLogistics = async (quoteId: string) => {
+    setLoadingLogistics(prev => ({ ...prev, [quoteId]: true }));
+    try {
+      const res = await fetch(`/api/quotes/${quoteId}/logistics`);
+      const data = await res.json();
+      if (data.success) {
+        setLogisticsData(prev => ({ ...prev, [quoteId]: { reserved: data.reserved, scanned: data.scanned } }));
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingLogistics(prev => ({ ...prev, [quoteId]: false }));
+    }
+  };
+
+  const handleSwitchTab = (projectId: string, tab: 'docs' | 'logistics', devisId?: string) => {
+    setProjectTabs(prev => ({ ...prev, [projectId]: tab }));
+    if (tab === 'logistics' && devisId) {
+      fetchLogistics(devisId);
+    }
+  };
+
+  const handleLogisticsScanSuccess = async (qrCodeId: string) => {
+    if (!activeScannerQuoteId) return;
+    const action = scannerAction[activeScannerQuoteId] ?? 'check-out';
+
+    try {
+      const res = await fetch(`/api/quotes/${activeScannerQuoteId}/logistics`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, qrCodeId })
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchLogistics(activeScannerQuoteId);
+        setIsLogisticsScannerOpen(false);
+      } else {
+        alert(data.error || 'Erreur lors du scan.');
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Une erreur est survenue lors de la transmission.');
+    }
+  };
 
   // Coefficients
   const [coeffWeekend, setCoeffWeekend] = useState(1.4);
@@ -526,6 +581,9 @@ export default function ClientFolderPage({ params }: PageProps) {
               (q: any) => q.status === 'pending' || q.status === 'modified_by_admin' || q.status === 'pdf_pending'
             ).length;
 
+            const devisDoc = project.quotes.find(q => q.docType === 'devis');
+            const isLogisticsEligible = devisDoc && (devisDoc.status === 'validated' || devisDoc.status === 'locked');
+
             return (
               <div key={project.id} style={{ backgroundColor: '#ffffff', border: '1px solid rgba(0,0,0,.08)', borderRadius: '24px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,.02)' }}>
 
@@ -564,10 +622,237 @@ export default function ClientFolderPage({ params }: PageProps) {
                   </div>
                 </div>
 
+                {/* Tab selectors for validated/locked projects */}
+                {!isCollapsed && isLogisticsEligible && (
+                  <div style={{ display: 'flex', borderBottom: '1px solid rgba(0,0,0,.06)', padding: '0 26px' }}>
+                    <button
+                      onClick={() => handleSwitchTab(project.id, 'docs')}
+                      style={{
+                        padding: '12px 20px',
+                        border: 'none',
+                        background: 'none',
+                        borderBottom: (projectTabs[project.id] ?? 'docs') === 'docs' ? '2px solid #0071e3' : 'none',
+                        color: (projectTabs[project.id] ?? 'docs') === 'docs' ? '#0071e3' : '#6e6e73',
+                        fontWeight: 600,
+                        fontSize: '13px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Documents
+                    </button>
+                    <button
+                      onClick={() => {
+                        const devis = project.quotes.find(q => q.docType === 'devis');
+                        handleSwitchTab(project.id, 'logistics', devis?.id);
+                      }}
+                      style={{
+                        padding: '12px 20px',
+                        border: 'none',
+                        background: 'none',
+                        borderBottom: projectTabs[project.id] === 'logistics' ? '2px solid #0071e3' : 'none',
+                        color: projectTabs[project.id] === 'logistics' ? '#0071e3' : '#6e6e73',
+                        fontWeight: 600,
+                        fontSize: '13px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Logistique
+                    </button>
+                  </div>
+                )}
+
                 {/* Project body */}
                 {!isCollapsed && (
                   <div style={{ padding: '24px 26px', display: 'flex', flexDirection: 'column', gap: '28px' }}>
-                    {DOC_ORDER.map(dt => {
+                    {projectTabs[project.id] === 'logistics' ? (() => {
+                      const devis = project.quotes.find(q => q.docType === 'devis');
+                      if (!devis) {
+                        return (
+                          <div style={{ padding: '30px', textAlign: 'center', color: '#86868b' }}>
+                            Aucun devis trouvé pour ce projet.
+                          </div>
+                        );
+                      }
+                      
+                      const data = logisticsData[devis.id];
+                      const loading = loadingLogistics[devis.id];
+                      const currentAction = scannerAction[devis.id] ?? 'check-out';
+
+                      if (loading) {
+                        return (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#86868b', fontSize: '14px', padding: '30px', justifyContent: 'center' }}>
+                            <Loader2 style={{ width: '18px', height: '18px', animation: 'spin 1s linear infinite' }} />
+                            Chargement des données logistiques...
+                          </div>
+                        );
+                      }
+
+                      if (!data) {
+                        return (
+                          <div style={{ padding: '30px', textAlign: 'center', color: '#86868b' }}>
+                            Données logistiques non chargées. Veuillez actualiser.
+                          </div>
+                        );
+                      }
+
+                      const stillRented = data.scanned.filter(item => item.status === 'RENTED');
+
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                          
+                          {/* Alerts for non-returned items */}
+                          {stillRented.length > 0 && (
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'flex-start',
+                              gap: '12px',
+                              padding: '16px 20px',
+                              borderRadius: '16px',
+                              backgroundColor: 'rgba(255,159,10,0.12)',
+                              border: '1px solid rgba(255,159,10,0.24)',
+                              color: '#bf5af2'
+                            }}>
+                              <AlertTriangle style={{ width: '20px', height: '20px', color: '#ff9f0a', flexShrink: 0, marginTop: '2px' }} />
+                              <div>
+                                <strong style={{ fontSize: '14px', color: '#ff9f0a', display: 'block' }}>Attention : Matériel non restitué</strong>
+                                <span style={{ fontSize: '13px', color: '#6e6e73', marginTop: '4px', display: 'block' }}>
+                                  Il y a {stillRented.length} exemplaire(s) physique(s) encore marqué(s) comme "Loué" (Check-out effectué, mais retour non validé).
+                                </span>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '10px' }}>
+                                  {stillRented.map(item => (
+                                    <span key={item.id} style={{ fontSize: '12px', fontFamily: 'monospace', padding: '3px 8px', borderRadius: '6px', backgroundColor: 'rgba(255,159,10,0.15)', color: '#ff9f0a' }}>
+                                      {item.itemName} ({item.qrCodeId})
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Scan Actions Panel */}
+                          <div style={{
+                            backgroundColor: '#f5f5f7',
+                            borderRadius: '20px',
+                            padding: '20px',
+                            display: 'flex',
+                            flexWrap: 'wrap',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: '16px'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                              <div style={{ display: 'flex', backgroundColor: 'rgba(0,0,0,0.05)', padding: '3px', borderRadius: '980px' }}>
+                                <button
+                                  onClick={() => setScannerAction(prev => ({ ...prev, [devis.id]: 'check-out' }))}
+                                  style={{
+                                    padding: '6px 16px',
+                                    borderRadius: '980px',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    fontSize: '12px',
+                                    fontWeight: 600,
+                                    transition: 'all 0.2s',
+                                    backgroundColor: currentAction === 'check-out' ? '#1d1d1f' : 'transparent',
+                                    color: currentAction === 'check-out' ? '#ffffff' : '#6e6e73'
+                                  }}
+                                >
+                                  Départ (Check-out)
+                                </button>
+                                <button
+                                  onClick={() => setScannerAction(prev => ({ ...prev, [devis.id]: 'check-in' }))}
+                                  style={{
+                                    padding: '6px 16px',
+                                    borderRadius: '980px',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    fontSize: '12px',
+                                    fontWeight: 600,
+                                    transition: 'all 0.2s',
+                                    backgroundColor: currentAction === 'check-in' ? '#1d1d1f' : 'transparent',
+                                    color: currentAction === 'check-in' ? '#ffffff' : '#6e6e73'
+                                  }}
+                                >
+                                  Retour (Check-in)
+                                </button>
+                              </div>
+                              
+                              <span style={{ fontSize: '13px', color: '#6e6e73' }}>
+                                Mode actuel : <strong>{currentAction === 'check-out' ? 'Scanner pour charger' : 'Scanner pour restituer'}</strong>
+                              </span>
+                            </div>
+
+                            <button
+                              onClick={() => {
+                                setActiveScannerQuoteId(devis.id);
+                                setIsLogisticsScannerOpen(true);
+                              }}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                padding: '10px 20px',
+                                borderRadius: '980px',
+                                backgroundColor: '#0071e3',
+                                color: '#ffffff',
+                                border: 'none',
+                                cursor: 'pointer',
+                                fontWeight: 600,
+                                fontSize: '13px',
+                                transition: 'background 0.2s'
+                              }}
+                              onMouseEnter={e => e.currentTarget.style.backgroundColor = '#0077ed'}
+                              onMouseLeave={e => e.currentTarget.style.backgroundColor = '#0071e3'}
+                            >
+                              <Camera style={{ width: '16px', height: '16px' }} />
+                              {currentAction === 'check-out' ? 'Scanner Départ' : 'Scanner Retour'}
+                            </button>
+                          </div>
+
+                          {/* Progress Gauges Grid */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                            <h4 style={{ fontSize: '15px', fontWeight: 700, margin: 0 }}>Statut de préparation</h4>
+                            
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                              {data.reserved.map(item => {
+                                const scannedQty = data.scanned.filter(
+                                  s => s.productId === item.id && s.status === 'RENTED'
+                                ).length;
+                                const progressPct = Math.min(100, (scannedQty / item.quantity) * 100);
+
+                                return (
+                                  <div key={item.id} style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '16px', border: '1px solid rgba(0,0,0,.06)', borderRadius: '16px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                      <div>
+                                        <strong style={{ fontSize: '14px' }}>{item.brand} - {item.name}</strong>
+                                        <span style={{ fontSize: '12px', color: '#86868b', marginLeft: '8px' }}>
+                                          Quota : {item.quantity}
+                                        </span>
+                                      </div>
+                                      <span style={{ fontSize: '13px', fontWeight: 700, color: progressPct === 100 ? '#15803d' : '#1d1d1f' }}>
+                                        {scannedQty} / {item.quantity} scanné(s)
+                                      </span>
+                                    </div>
+
+                                    {/* Progress bar container */}
+                                    <div style={{ width: '100%', height: '8px', backgroundColor: 'rgba(0,0,0,0.05)', borderRadius: '4px', overflow: 'hidden' }}>
+                                      <div style={{
+                                        width: `${progressPct}%`,
+                                        height: '100%',
+                                        backgroundColor: progressPct === 100 ? '#30d158' : '#0071e3',
+                                        borderRadius: '4px',
+                                        transition: 'width 0.4s cubic-bezier(0.1, 0.8, 0.3, 1)'
+                                      }} />
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                        </div>
+                      );
+                    })() : (
+                      DOC_ORDER.map(dt => {
                       const docs = byDocType[dt];
                       if (!docs || docs.length === 0) return null;
                       const meta = DOC_META[dt];
@@ -873,7 +1158,7 @@ export default function ClientFolderPage({ params }: PageProps) {
                           </div>
                         </div>
                       );
-                    })}
+                    }))}
                   </div>
                 )}
 
@@ -883,6 +1168,14 @@ export default function ClientFolderPage({ params }: PageProps) {
         )}
 
       </main>
+
+      {/* Logistics Scanner Modal */}
+      <ScannerModal
+        isOpen={isLogisticsScannerOpen}
+        onClose={() => setIsLogisticsScannerOpen(false)}
+        onScanSuccess={handleLogisticsScanSuccess}
+        title="Scanner matériel logistique"
+      />
 
       <Footer />
     </div>

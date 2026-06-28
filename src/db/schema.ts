@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, integer, doublePrecision } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, boolean, integer, doublePrecision, uuid } from 'drizzle-orm/pg-core';
 
 export const user = pgTable('user', {
   id: text('id').primaryKey(),
@@ -28,8 +28,19 @@ export const equipment = pgTable('equipment', {
   priceType: text('priceType').default('numeric').notNull(), // 'numeric' | 'on_request'
   priceTax: text('priceTax').default('HT').notNull(), // 'HT' | 'TTC'
   purchasePrice: doublePrecision('purchasePrice').default(0).notNull(),
-  quantity: integer('quantity').default(1).notNull(),
   image: text('image'),
+});
+
+export const productItems = pgTable('product_items', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  productId: text('product_id')
+    .notNull()
+    .references(() => equipment.id, { onDelete: 'cascade' }),
+  itemName: text('item_name').notNull(),
+  qrCodeId: text('qr_code_id').unique().notNull(),
+  status: text('status').$type<'AVAILABLE' | 'RENTED' | 'MAINTENANCE'>().default('AVAILABLE').notNull(),
+  rentedByQuoteId: text('rented_by_quote_id')
+    .references(() => quote.id, { onDelete: 'set null' }),
 });
 
 export const session = pgTable('session', {
@@ -96,4 +107,11 @@ export const quote = pgTable('quote', {
   clientRefusalNote: text('clientRefusalNote'), // client message when refusing admin modifications
   createdAt: timestamp('createdAt').notNull(),
   updatedAt: timestamp('updatedAt').notNull(),
+});
+
+export const scanSessions = pgTable('scan_sessions', {
+  id: text('id').primaryKey(),
+  qrCodeId: text('qr_code_id'),
+  status: text('status').$type<'PENDING' | 'SCANNED'>().default('PENDING').notNull(),
+  createdAt: timestamp('createdAt').defaultNow().notNull(),
 });

@@ -2,8 +2,106 @@ import { NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import { auth } from '@/lib/auth';
 import { db } from '@/db';
-import { equipment as equipmentTable } from '@/db/schema';
+import { equipment as equipmentTable, productItems as productItemsTable } from '@/db/schema';
+import { getEquipmentItemWithQuantity, syncProductItems } from '@/db/queries';
 import { eq } from 'drizzle-orm';
+
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+
+    // 1. Verify administrator session
+    const session = await auth.api.getSession({
+      headers: await headers(),
+    });
+
+    if (!session?.user || (session.user as any).role !== 'admin') {
+      return NextResponse.json({ success: false, error: 'Accès interdit.' }, { status: 403 });
+    }
+
+    // 2. Fetch equipment item
+    const existing = await getEquipmentItemWithQuantity(id);
+    if (existing.length === 0) {
+      return NextResponse.json({ success: false, error: 'Équipement introuvable.' }, { status: 404 });
+    }
+
+    // 3. Fetch product items (exemplaires physiques)
+    const items = await db.select().from(productItemsTable).where(eq(productItemsTable.productId, id));
+
+    return NextResponse.json({
+      success: true,
+      equipment: existing[0],
+      items,
+    });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message || String(error) }, { status: 500 });
+  }
+}
+
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+
+    // 1. Verify administrator session
+    const session = await auth.api.getSession({
+      headers: await headers(),
+    });
+
+    if (!session?.user || (session.user as any).role !== 'admin') {
+      return NextResponse.json({ success: false, error: 'Accès interdit.' }, { status: 403 });
+    }
+
+    const { qrCodeId } = await request.json();
+    if (!qrCodeId) {
+      return NextResponse.json({ success: false, error: 'QR Code requis.' }, { status: 400 });
+    }
+
+    // 2. Check if QR code is already assigned
+    const conflict = await db.select().from(productItemsTable).where(eq(productItemsTable.qrCodeId, qrCodeId)).limit(1);
+    if (conflict.length > 0) {
+      return NextResponse.json({ success: false, error: 'Ce QR code est déjà attribué à un autre exemplaire.' }, { status: 400 });
+    }
+
+    // 3. Find parent product to get name
+    const [eqItem] = await db.select().from(equipmentTable).where(eq(equipmentTable.id, id)).limit(1);
+    if (!eqItem) {
+      return NextResponse.json({ success: false, error: 'Équipement introuvable.' }, { status: 404 });
+    }
+
+    // 4. Generate item name
+    const existingItems = await db.select().from(productItemsTable).where(eq(productItemsTable.productId, id));
+    let maxIndex = 0;
+    for (const item of existingItems) {
+      const match = item.itemName.match(/\d+$/);
+      if (match) {
+        const num = parseInt(match[0], 10);
+        if (num > maxIndex) maxIndex = num;
+      }
+    }
+    if (maxIndex === 0) {
+      maxIndex = existingItems.length;
+    }
+    const itemName = `${eqItem.name} ${maxIndex + 1}`;
+
+    // 5. Insert new item
+    const [newItem] = await db.insert(productItemsTable).values({
+      productId: id,
+      itemName,
+      qrCodeId,
+      status: 'AVAILABLE',
+    }).returning();
+
+    return NextResponse.json({ success: true, item: newItem });
+  } catch (error: any) {
+    return NextResponse.json({ success: false, error: error.message || String(error) }, { status: 500 });
+  }
+}
 
 export async function PUT(
   request: Request,
@@ -25,8 +123,8 @@ export async function PUT(
     const body = await request.json();
     const { name, brand, cat, desc, specs, price, priceType, priceTax, purchasePrice, quantity, image } = body;
 
-    // 3. Find if item exists
-    const existing = await db.select().from(equipmentTable).where(eq(equipmentTable.id, id)).limit(1);
+    // 3. Find if item exists with quantity
+    const existing = await getEquipmentItemWithQuantity(id);
     if (existing.length === 0) {
       return NextResponse.json({ success: false, error: 'Équipement introuvable.' }, { status: 404 });
     }
@@ -55,10 +153,14 @@ export async function PUT(
         priceType: priceType !== undefined ? priceType : existing[0].priceType,
         priceTax: priceTax !== undefined ? priceTax : existing[0].priceTax,
         purchasePrice: purchasePrice !== undefined ? Number(purchasePrice) : existing[0].purchasePrice,
-        quantity: quantity !== undefined ? Number(quantity) : existing[0].quantity,
         image: image !== undefined ? image : existing[0].image,
       })
       .where(eq(equipmentTable.id, id));
+
+    // 5. Synchronize product items if quantity is changed
+    if (quantity !== undefined) {
+      await syncProductItems(id, Number(quantity));
+    }
 
     return NextResponse.json({ success: true, message: 'Équipement mis à jour avec succès.' });
   } catch (error: any) {

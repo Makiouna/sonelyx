@@ -6,7 +6,8 @@ import Link from 'next/link';
 import { authClient } from '@/lib/auth-client';
 import Header from '@/components/header';
 import Footer from '@/components/footer';
-import { Loader2, Plus, Edit2, Trash2, Users, Sliders, DollarSign, TrendingUp, BarChart3, Info, ChevronLeft, Tag, FileText, CreditCard } from 'lucide-react';
+import ScannerModal from '@/components/scanner-modal';
+import { Loader2, Plus, Edit2, Trash2, Users, Sliders, DollarSign, TrendingUp, BarChart3, Info, ChevronLeft, Tag, FileText, CreditCard, Camera, QrCode } from 'lucide-react';
 
 interface EquipmentItem {
   id: string;
@@ -60,6 +61,12 @@ export default function AdminDashboard() {
   const [catalogPageSize, setCatalogPageSize] = useState(25);
 
   const [editingItem, setEditingItem] = useState<EquipmentItem | null>(null);
+  
+  // Physical items management states
+  const [editingItems, setEditingItems] = useState<any[]>([]);
+  const [loadingItems, setLoadingItems] = useState(false);
+  const [isLocalScannerOpen, setIsLocalScannerOpen] = useState(false);
+  const [isGlobalScannerOpen, setIsGlobalScannerOpen] = useState(false);
 
   // Form states for Equipment
   const [name, setName] = useState('');
@@ -494,6 +501,115 @@ export default function AdminDashboard() {
     setView('edit');
   };
 
+  const fetchPhysicalItems = async (productId: string) => {
+    setLoadingItems(true);
+    try {
+      const res = await fetch(`/api/equipment/${productId}`);
+      const data = await res.json();
+      if (data.success) {
+        setEditingItems(data.items || []);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingItems(false);
+    }
+  };
+
+  useEffect(() => {
+    if (view === 'edit' && editingItem) {
+      fetchPhysicalItems(editingItem.id);
+    }
+  }, [view, editingItem]);
+
+  const handleUpdatePhysicalItemStatus = async (itemId: string, status: string) => {
+    try {
+      const res = await fetch(`/api/product-items/${itemId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (editingItem) {
+          fetchPhysicalItems(editingItem.id);
+          fetchEquipment(); // Update main stock count
+        }
+      } else {
+        alert(data.error || 'Erreur de mise à jour.');
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Une erreur est survenue.');
+    }
+  };
+
+  const handleDeletePhysicalItem = async (itemId: string) => {
+    if (!confirm('Êtes-vous sûr de vouloir supprimer cet exemplaire ?')) return;
+
+    try {
+      const res = await fetch(`/api/product-items/${itemId}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+      if (data.success) {
+        if (editingItem) {
+          fetchPhysicalItems(editingItem.id);
+          fetchEquipment(); // Update main stock count
+        }
+      } else {
+        alert(data.error || 'Erreur de suppression.');
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Une erreur est survenue.');
+    }
+  };
+
+  const handleLocalScanSuccess = async (qrCodeId: string) => {
+    if (!editingItem) return;
+
+    try {
+      const res = await fetch(`/api/equipment/${editingItem.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ qrCodeId })
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchPhysicalItems(editingItem.id);
+        fetchEquipment(); // Update main stock count
+        setIsLocalScannerOpen(false);
+      } else {
+        alert(data.error || 'Erreur lors de l\'ajout de l\'exemplaire.');
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Une erreur est survenue.');
+    }
+  };
+
+  const handleGlobalScanSuccess = async (qrCodeId: string) => {
+    try {
+      const res = await fetch(`/api/equipment/scan?qrCodeId=${qrCodeId}`);
+      const data = await res.json();
+      if (data.success && data.productId) {
+        const item = equipment.find(e => e.id === data.productId);
+        if (item) {
+          showEditView(item);
+          setIsGlobalScannerOpen(false);
+        } else {
+          alert("Équipement correspondant introuvable dans la liste locale.");
+        }
+      } else {
+        alert(data.error || 'Exemplaire non trouvé.');
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Une erreur est survenue lors de la recherche.');
+    }
+  };
+
   // CRUD Equipment Handlers
   const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -875,31 +991,66 @@ export default function AdminDashboard() {
                 <div style={{ backgroundColor: '#ffffff', border: '1px solid rgba(0,0,0,.08)', borderRadius: '24px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,.02)' }}>
                   <div style={{ padding: '24px 30px', borderBottom: '1px solid rgba(0,0,0,.06)', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
                     <h3 style={{ fontSize: '18px', fontWeight: 800, margin: 0 }}>Catalogue de Location</h3>
-                    <input
-                      type="text"
-                      placeholder="Rechercher un matériel (nom, marque, description, ID)..."
-                      value={searchQuery}
-                      onChange={e => { setSearchQuery(e.target.value); setCatalogPage(1); }}
-                      style={{
-                        padding: '8px 18px',
-                        borderRadius: '980px',
-                        border: '1px solid rgba(0,0,0,.12)',
-                        outline: 'none',
-                        fontSize: '13px',
-                        fontFamily: 'inherit',
-                        width: '320px',
-                        backgroundColor: '#f5f5f7',
-                        transition: 'border-color .2s, background-color .2s'
-                      }}
-                      onFocus={e => {
-                        e.currentTarget.style.borderColor = '#0071e3';
-                        e.currentTarget.style.backgroundColor = '#ffffff';
-                      }}
-                      onBlur={e => {
-                        e.currentTarget.style.borderColor = 'rgba(0,0,0,.12)';
-                        e.currentTarget.style.backgroundColor = '#f5f5f7';
-                      }}
-                    />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <input
+                        type="text"
+                        placeholder="Rechercher un matériel (nom, marque, description, ID)..."
+                        value={searchQuery}
+                        onChange={e => { setSearchQuery(e.target.value); setCatalogPage(1); }}
+                        style={{
+                          padding: '8px 18px',
+                          borderRadius: '980px',
+                          border: '1px solid rgba(0,0,0,.12)',
+                          outline: 'none',
+                          fontSize: '13px',
+                          fontFamily: 'inherit',
+                          width: '320px',
+                          backgroundColor: '#f5f5f7',
+                          transition: 'border-color .2s, background-color .2s'
+                        }}
+                        onFocus={e => {
+                          e.currentTarget.style.borderColor = '#0071e3';
+                          e.currentTarget.style.backgroundColor = '#ffffff';
+                        }}
+                        onBlur={e => {
+                          e.currentTarget.style.borderColor = 'rgba(0,0,0,.12)';
+                          e.currentTarget.style.backgroundColor = '#f5f5f7';
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setIsGlobalScannerOpen(true)}
+                        title="Rechercher par QR Code"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          padding: '8px 16px',
+                          borderRadius: '980px',
+                          border: '1px solid rgba(0,0,0,.12)',
+                          backgroundColor: '#ffffff',
+                          cursor: 'pointer',
+                          color: '#1d1d1f',
+                          transition: 'all 0.2s',
+                          gap: '6px',
+                          fontSize: '13px',
+                          fontWeight: 600
+                        }}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.borderColor = '#0071e3';
+                          e.currentTarget.style.color = '#0071e3';
+                          e.currentTarget.style.backgroundColor = 'rgba(0,113,227,0.04)';
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.borderColor = 'rgba(0,0,0,.12)';
+                          e.currentTarget.style.color = '#1d1d1f';
+                          e.currentTarget.style.backgroundColor = '#ffffff';
+                        }}
+                      >
+                        <QrCode style={{ width: '16px', height: '16px' }} />
+                        Scanner
+                      </button>
+                    </div>
                   </div>
 
                   {loadingEquipment ? (
@@ -2078,9 +2229,110 @@ export default function AdminDashboard() {
                       <input type="number" placeholder="2200" value={purchasePrice} onChange={e => setPurchasePrice(e.target.value)} style={{ padding: '10px 16px', borderRadius: '980px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '14px' }} required />
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <label style={{ fontSize: '13px', fontWeight: 600 }}>Quantité stock *</label>
-                      <input type="number" placeholder="4" value={quantity} onChange={e => setQuantity(e.target.value)} style={{ padding: '10px 16px', borderRadius: '980px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '14px' }} required />
+                      <label style={{ fontSize: '13px', fontWeight: 600 }}>Quantité stock (Calculée)</label>
+                      <div style={{ padding: '10px 16px', borderRadius: '980px', border: '1px solid rgba(0,0,0,.08)', backgroundColor: '#f5f5f7', fontSize: '14px', fontWeight: 600, display: 'flex', alignItems: 'center', height: '100%', minHeight: '41px' }}>
+                        {editingItems.filter(item => item.status !== 'MAINTENANCE').length} actif(s) / {editingItems.length} total
+                      </div>
                     </div>
+                  </div>
+
+                  {/* Section Exemplaires Physiques (Assets) */}
+                  <div style={{ borderTop: '1px solid rgba(0,0,0,.06)', paddingTop: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <h4 style={{ fontSize: '16px', fontWeight: 700, margin: 0 }}>Exemplaires Physiques (Assets)</h4>
+                        <p style={{ fontSize: '12px', color: '#86868b', margin: '4px 0 0' }}>Chaque exemplaire possède un QR Code unique pour le suivi du stock.</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsLocalScannerOpen(true)}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          padding: '8px 16px',
+                          borderRadius: '980px',
+                          backgroundColor: '#1d1d1f',
+                          color: '#ffffff',
+                          border: 'none',
+                          cursor: 'pointer',
+                          fontWeight: 600,
+                          fontSize: '13px',
+                          transition: 'background 0.2s'
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.backgroundColor = '#000000'}
+                        onMouseLeave={e => e.currentTarget.style.backgroundColor = '#1d1d1f'}
+                      >
+                        <Camera style={{ width: '15px', height: '15px' }} />
+                        Scanner & Ajouter
+                      </button>
+                    </div>
+
+                    {loadingItems ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#86868b', fontSize: '14px', padding: '12px' }}>
+                        <Loader2 style={{ width: '16px', height: '16px', animation: 'spin 1s linear infinite' }} />
+                        Chargement des exemplaires...
+                      </div>
+                    ) : editingItems.length === 0 ? (
+                      <div style={{ padding: '24px', borderRadius: '18px', border: '1px dashed rgba(0,0,0,.15)', textAlign: 'center', color: '#86868b', fontSize: '14px' }}>
+                        Aucun exemplaire physique enregistré pour cet équipement.
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        {editingItems.map((item) => (
+                          <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', borderRadius: '16px', backgroundColor: '#f5f5f7', border: '1px solid rgba(0,0,0,.04)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                              <span style={{ fontWeight: 600, fontSize: '14px' }}>{item.itemName}</span>
+                              <span style={{ fontSize: '12px', fontFamily: 'monospace', padding: '4px 10px', borderRadius: '980px', backgroundColor: 'rgba(0,0,0,.06)', color: '#1d1d1f' }}>
+                                QR: {item.qrCodeId}
+                              </span>
+                            </div>
+                            
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                              <select
+                                value={item.status}
+                                onChange={e => handleUpdatePhysicalItemStatus(item.id, e.target.value)}
+                                style={{
+                                  padding: '6px 12px',
+                                  borderRadius: '980px',
+                                  border: '1px solid rgba(0,0,0,.12)',
+                                  outline: 'none',
+                                  fontSize: '13px',
+                                  backgroundColor: '#fff',
+                                  cursor: 'pointer',
+                                  fontWeight: 500
+                                }}
+                              >
+                                <option value="AVAILABLE">Disponible</option>
+                                <option value="RENTED">Loué</option>
+                                <option value="MAINTENANCE">En maintenance</option>
+                              </select>
+                              
+                              <button
+                                type="button"
+                                onClick={() => handleDeletePhysicalItem(item.id)}
+                                style={{
+                                  border: 'none',
+                                  background: 'none',
+                                  color: '#ff453a',
+                                  cursor: 'pointer',
+                                  padding: '6px',
+                                  borderRadius: '50%',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  transition: 'background 0.2s'
+                                }}
+                                onMouseEnter={e => e.currentTarget.style.backgroundColor = 'rgba(255,69,58,0.1)'}
+                                onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                              >
+                                <Trash2 style={{ width: '16px', height: '16px' }} />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -2128,6 +2380,22 @@ export default function AdminDashboard() {
             </div>
           </div>
         )}
+
+        {/* Local Scan Modal (Adding Physical Item) */}
+        <ScannerModal
+          isOpen={isLocalScannerOpen}
+          onClose={() => setIsLocalScannerOpen(false)}
+          onScanSuccess={handleLocalScanSuccess}
+          title="Enregistrer un exemplaire"
+        />
+
+        {/* Global Scan Modal (Search/Redirect) */}
+        <ScannerModal
+          isOpen={isGlobalScannerOpen}
+          onClose={() => setIsGlobalScannerOpen(false)}
+          onScanSuccess={handleGlobalScanSuccess}
+          title="Rechercher un produit par scan"
+        />
 
       </div>
 
