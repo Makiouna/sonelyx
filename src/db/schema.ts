@@ -90,6 +90,7 @@ export const quote = pgTable('quote', {
   pdfUrl: text('pdfUrl'), // link to paper PDF
   docType: text('docType').default('devis').notNull(), // 'devis' | 'facture' | 'avoir' | 'contrat'
   projectName: text('projectName'), // custom project name set by client (null = auto-generated)
+  linkedDevisId: text('linkedDevisId'), // for factures/avoirs: id of the source devis
   discount: doublePrecision('discount').default(0).notNull(), // global promo discount percentage
   previousVersion: text('previousVersion'), // JSON snapshot of quote state before admin modification
   clientRefusalNote: text('clientRefusalNote'), // client message when refusing admin modifications

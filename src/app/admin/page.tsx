@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { authClient } from '@/lib/auth-client';
 import Header from '@/components/header';
 import Footer from '@/components/footer';
-import { Loader2, Plus, Edit2, Trash2, Users, Sliders, DollarSign, TrendingUp, BarChart3, Info, ChevronLeft, Tag, FileText } from 'lucide-react';
+import { Loader2, Plus, Edit2, Trash2, Users, Sliders, DollarSign, TrendingUp, BarChart3, Info, ChevronLeft, Tag, FileText, CreditCard } from 'lucide-react';
 
 interface EquipmentItem {
   id: string;
@@ -87,6 +87,14 @@ export default function AdminDashboard() {
   const [settingsError, setSettingsError] = useState('');
   const [settingsLoading, setSettingsLoading] = useState(false);
 
+  // Payment settings
+  const [adminIban, setAdminIban] = useState('');
+  const [adminBic, setAdminBic] = useState('');
+  const [adminPaymentInstructions, setAdminPaymentInstructions] = useState('');
+  const [paymentMessage, setPaymentMessage] = useState('');
+  const [paymentError, setPaymentError] = useState('');
+  const [paymentLoading, setPaymentLoading] = useState(false);
+
   // Admin Quotes list states
   const [adminQuotes, setAdminQuotes] = useState<any[]>([]);
   const [loadingQuotes, setLoadingQuotes] = useState(true);
@@ -135,6 +143,9 @@ export default function AdminDashboard() {
         setAdminCoeffWeekend(String(data.coeffWeekend));
         setAdminCoeff3Jours(String(data.coeff3Jours));
         setAdminCoeffSemaine(String(data.coeffSemaine));
+        setAdminIban(data.iban || '');
+        setAdminBic(data.bic || '');
+        setAdminPaymentInstructions(data.paymentInstructions || '');
       }
     } catch (e) {
       console.error('Error fetching settings:', e);
@@ -171,6 +182,31 @@ export default function AdminDashboard() {
       setSettingsError(err.message || 'Une erreur est survenue.');
     } finally {
       setSettingsLoading(false);
+    }
+  };
+
+  const handleUpdatePaymentSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPaymentMessage('');
+    setPaymentError('');
+    setPaymentLoading(true);
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ iban: adminIban, bic: adminBic, paymentInstructions: adminPaymentInstructions })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPaymentMessage('Coordonnées bancaires mises à jour.');
+        fetchSettings();
+      } else {
+        setPaymentError(data.error || 'Une erreur est survenue.');
+      }
+    } catch (err: any) {
+      setPaymentError(err.message || 'Une erreur est survenue.');
+    } finally {
+      setPaymentLoading(false);
     }
   };
 
@@ -766,7 +802,7 @@ export default function AdminDashboard() {
                     gap: '6px'
                   }}
                 >
-                  Demandes de Devis
+                  Comptabilité
                   {adminQuotes.filter(q => q.status === 'pending').length > 0 && (
                     <span style={{ fontSize: '11px', fontWeight: 800, backgroundColor: '#0071e3', color: '#fff', padding: '1px 6px', borderRadius: '980px' }}>
                       {adminQuotes.filter(q => q.status === 'pending').length}
@@ -1221,7 +1257,8 @@ export default function AdminDashboard() {
             )}
 
             {activeTab === 'settings' && (
-              <div style={{ maxWidth: '600px', backgroundColor: '#ffffff', border: '1px solid rgba(0,0,0,.08)', borderRadius: '24px', padding: '30px', boxShadow: '0 4px 20px rgba(0,0,0,.02)' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '30px', maxWidth: '600px' }}>
+              <div style={{ backgroundColor: '#ffffff', border: '1px solid rgba(0,0,0,.08)', borderRadius: '24px', padding: '30px', boxShadow: '0 4px 20px rgba(0,0,0,.02)' }}>
                 <h3 style={{ fontSize: '18px', fontWeight: 800, margin: '0 0 20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Sliders style={{ width: '20px', height: '20px', color: '#0071e3' }} /> Configuration Globale &amp; TVA
                 </h3>
@@ -1325,6 +1362,41 @@ export default function AdminDashboard() {
                   </button>
                 </form>
               </div>
+
+              {/* Coordonnées bancaires */}
+              <div style={{ backgroundColor: '#ffffff', border: '1px solid rgba(0,0,0,.08)', borderRadius: '24px', padding: '30px', boxShadow: '0 4px 20px rgba(0,0,0,.02)' }}>
+                <h3 style={{ fontSize: '18px', fontWeight: 800, margin: '0 0 20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <CreditCard style={{ width: '20px', height: '20px', color: '#0071e3' }} /> Coordonnées Bancaires
+                </h3>
+                <form onSubmit={handleUpdatePaymentSettings} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  {paymentMessage && (
+                    <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #dcfce7', borderRadius: '12px', padding: '12px', fontSize: '13px', color: '#15803d', fontWeight: 500 }}>
+                      {paymentMessage}
+                    </div>
+                  )}
+                  {paymentError && (
+                    <div style={{ backgroundColor: '#fef2f2', border: '1px solid #fee2e2', borderRadius: '12px', padding: '12px', fontSize: '13px', color: '#ef4444', fontWeight: 500 }}>
+                      {paymentError}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '13px', fontWeight: 600 }}>IBAN</label>
+                    <input type="text" placeholder="FR76 XXXX XXXX XXXX XXXX XXXX XXX" value={adminIban} onChange={e => setAdminIban(e.target.value)} style={{ padding: '10px 16px', borderRadius: '980px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '14px', fontFamily: 'inherit' }} />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '13px', fontWeight: 600 }}>BIC / SWIFT</label>
+                    <input type="text" placeholder="BNPAFRPP" value={adminBic} onChange={e => setAdminBic(e.target.value)} style={{ padding: '10px 16px', borderRadius: '980px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '14px', fontFamily: 'inherit' }} />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '13px', fontWeight: 600 }}>Instructions de paiement</label>
+                    <textarea rows={3} placeholder="Ex : Virement bancaire à effectuer sous 30 jours à réception de la facture." value={adminPaymentInstructions} onChange={e => setAdminPaymentInstructions(e.target.value)} style={{ padding: '12px 16px', borderRadius: '16px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '14px', fontFamily: 'inherit', resize: 'vertical' }} />
+                  </div>
+                  <button type="submit" disabled={paymentLoading} style={{ width: '100%', padding: '12px', borderRadius: '980px', backgroundColor: '#1d1d1f', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginTop: '6px' }}>
+                    {paymentLoading ? <Loader2 style={{ width: '16px', height: '16px', animation: 'spin 1s linear infinite' }} /> : 'Enregistrer les coordonnées'}
+                  </button>
+                </form>
+              </div>
+            </div>
             )}
 
             {activeTab === 'quotes' && (() => {

@@ -9,6 +9,8 @@ import Footer from '@/components/footer';
 import {
   Loader2,
   ChevronLeft,
+  ChevronDown,
+  ChevronUp,
   Trash2,
   Mail,
   Calendar,
@@ -16,7 +18,12 @@ import {
   Upload,
   AlertTriangle,
   Percent,
+  CheckCircle,
+  Receipt,
+  Lock,
+  PackageCheck,
 } from 'lucide-react';
+import { groupQuotesByProject, getProjectStatus, projectStatusLabel, projectStatusColors } from '@/lib/project-grouping';
 
 interface EquipmentItem {
   id: string;
@@ -49,7 +56,9 @@ interface QuoteItem {
 interface Quote {
   id: string;
   userId: string;
-  status: 'draft' | 'pending' | 'modified_by_admin' | 'pdf_pending' | 'validated' | 'cancelled';
+  status: 'draft' | 'pending' | 'modified_by_admin' | 'pdf_pending' | 'validated' | 'cancelled' | 'locked';
+  docType: string;
+  linkedDevisId: string | null;
   previousVersion?: string | null;
   startDate: string;
   endDate: string;
@@ -87,7 +96,7 @@ export default function ClientFolderPage({ params }: PageProps) {
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [equipment, setEquipment] = useState<EquipmentItem[]>([]);
   const [tvaRate, setTvaRate] = useState(20);
-  
+
   // Coefficients
   const [coeffWeekend, setCoeffWeekend] = useState(1.4);
   const [coeff3Jours, setCoeff3Jours] = useState(1.8);
@@ -97,8 +106,8 @@ export default function ClientFolderPage({ params }: PageProps) {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  // Tab state: 'devis' | 'factures' | 'avoirs'
-  const [activeTab, setActiveTab] = useState<'devis' | 'factures' | 'avoirs'>('devis');
+  // Track which projects are collapsed (empty = all expanded)
+  const [collapsedProjects, setCollapsedProjects] = useState<Record<string, boolean>>({});
 
   // Edit Quote State
   const [editingQuoteId, setEditingQuoteId] = useState<string | null>(null);
@@ -111,6 +120,9 @@ export default function ClientFolderPage({ params }: PageProps) {
 
   // PDF file upload state
   const [pdfFileMap, setPdfFileMap] = useState<{ [quoteId: string]: File | null }>({});
+
+  // Payment settings (IBAN/BIC for display under invoices)
+  const [paymentSettings, setPaymentSettings] = useState<{ iban: string; bic: string; instructions: string } | null>(null);
 
   // Security check on load
   useEffect(() => {
@@ -156,6 +168,13 @@ export default function ClientFolderPage({ params }: PageProps) {
         }
       }
 
+      // 3b. Fetch payment settings (IBAN/BIC)
+      const psRes = await fetch('/api/settings');
+      const psData = await psRes.json();
+      if (psData.success && (psData.iban || psData.bic || psData.paymentInstructions)) {
+        setPaymentSettings({ iban: psData.iban || '', bic: psData.bic || '', instructions: psData.paymentInstructions || '' });
+      }
+
       // 4. Fetch all quotes & filter for this client
       const quotesRes = await fetch('/api/admin/quotes');
       const quotesData = await quotesRes.json();
@@ -184,6 +203,50 @@ export default function ClientFolderPage({ params }: PageProps) {
         fetchClientData();
       } else {
         alert(data.error || 'Une erreur est survenue.');
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Erreur.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleCreateFacture = async (devisId: string) => {
+    setActionLoading(devisId + '-facture');
+    try {
+      const res = await fetch('/api/admin/invoices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ devisId })
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchClientData();
+      } else {
+        alert(data.error || 'Erreur lors de la création de la facture.');
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Erreur.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleLockDevis = async (devisId: string) => {
+    setActionLoading(devisId + '-lock');
+    try {
+      const res = await fetch(`/api/quotes/${devisId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'locked' })
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchClientData();
+      } else {
+        alert(data.error || 'Erreur.');
       }
     } catch (e) {
       console.error(e);
@@ -361,7 +424,7 @@ export default function ClientFolderPage({ params }: PageProps) {
           totalHT,
           totalTTC,
           discount: editDiscount,
-          status: 'modified_by_admin', // changes status to modified which client needs to validate
+          status: 'modified_by_admin',
         }),
       });
 
@@ -397,27 +460,29 @@ export default function ClientFolderPage({ params }: PageProps) {
     );
   }
 
-  // Filter quotes into categories
-  // Devis: pending, modified_by_admin, pdf_pending
-  const clientDevis = quotes.filter(q => ['pending', 'modified_by_admin', 'pdf_pending'].includes(q.status));
-  // Factures: validated (validated devis with attached PDF)
-  const clientFactures = quotes.filter(q => q.status === 'validated');
-  // Avoirs: cancelled
-  const clientAvoirs = quotes.filter(q => q.status === 'cancelled');
+  // Group all client quotes into projects
+  const projects = groupQuotesByProject(quotes as any);
+
+  const DOC_ORDER = ['devis', 'facture', 'avoir', 'contrat'] as const;
+  const DOC_META: Record<string, { label: string; color: string; bg: string }> = {
+    devis:   { label: 'Devis',    color: '#0071e3', bg: '#e8f1fd' },
+    facture: { label: 'Factures', color: '#7c3aed', bg: '#f3e8ff' },
+    avoir:   { label: 'Avoirs',   color: '#0891b2', bg: '#e0f7fa' },
+    contrat: { label: 'Contrats', color: '#16a34a', bg: '#dcfce7' },
+  };
 
   return (
     <div style={{ backgroundColor: '#f5f5f7', color: '#1d1d1f', fontFamily: 'var(--font-hanken-grotesk), sans-serif', WebkitFontSmoothing: 'antialiased', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <Header subTitle="Administration - Client" links={[]} />
 
-      <main style={{ flex: 1, maxWidth: '1180px', margin: '0 auto', width: '100%', padding: '40px clamp(20px, 4vw, 40px)' }}>
-        
-        {/* Return link */}
-        <Link href="/admin" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'none', color: '#86868b', fontSize: '14px', fontWeight: 600, marginBottom: '24px' }}>
+      <main style={{ flex: 1, maxWidth: '1180px', margin: '0 auto', width: '100%', padding: '40px clamp(20px, 4vw, 40px)', display: 'flex', flexDirection: 'column', gap: '28px' }}>
+
+        <Link href="/admin" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'none', color: '#86868b', fontSize: '14px', fontWeight: 600, alignSelf: 'flex-start' }}>
           <ChevronLeft style={{ width: '16px', height: '16px' }} /> Retour au Dashboard
         </Link>
 
-        {/* Client identity folder header */}
-        <div style={{ backgroundColor: '#ffffff', border: '1px solid rgba(0,0,0,.08)', borderRadius: '24px', padding: '30px', display: 'flex', flexWrap: 'wrap', gap: '30px', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 4px 20px rgba(0,0,0,.02)', marginBottom: '30px' }}>
+        {/* Client identity header */}
+        <div style={{ backgroundColor: '#ffffff', border: '1px solid rgba(0,0,0,.08)', borderRadius: '24px', padding: '30px', display: 'flex', flexWrap: 'wrap', gap: '30px', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 4px 20px rgba(0,0,0,.02)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
             <div style={{ width: '64px', height: '64px', borderRadius: '50%', backgroundColor: '#1d1d1f', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', fontWeight: 800 }}>
               {client.name.charAt(0).toUpperCase()}
@@ -434,538 +499,387 @@ export default function ClientFolderPage({ params }: PageProps) {
               </div>
             </div>
           </div>
-
-          {/* User role details */}
           <span style={{ fontSize: '12px', fontWeight: 800, textTransform: 'uppercase', color: '#0071e3', backgroundColor: '#e8f1fd', padding: '6px 12px', borderRadius: '980px' }}>
-            Dossier Client N° {client.id.slice(0, 8)}
+            {projects.length} projet{projects.length !== 1 ? 's' : ''} · N° {client.id.slice(0, 8)}
           </span>
         </div>
 
-        {/* File tabs switch bar */}
-        <div style={{ display: 'inline-flex', gap: '8px', backgroundColor: '#e8e8ed', padding: '4px', borderRadius: '980px', marginBottom: '30px' }}>
-          <button
-            onClick={() => setActiveTab('devis')}
-            style={{
-              padding: '8px 24px',
-              borderRadius: '980px',
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: '14px',
-              fontWeight: 600,
-              fontFamily: 'inherit',
-              transition: 'all .2s',
-              backgroundColor: activeTab === 'devis' ? '#ffffff' : 'transparent',
-              color: '#1d1d1f',
-              boxShadow: activeTab === 'devis' ? '0 2px 8px rgba(0,0,0,.08)' : 'none'
-            }}
-          >
-            Devis ({clientDevis.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('factures')}
-            style={{
-              padding: '8px 24px',
-              borderRadius: '980px',
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: '14px',
-              fontWeight: 600,
-              fontFamily: 'inherit',
-              transition: 'all .2s',
-              backgroundColor: activeTab === 'factures' ? '#ffffff' : 'transparent',
-              color: '#1d1d1f',
-              boxShadow: activeTab === 'factures' ? '0 2px 8px rgba(0,0,0,.08)' : 'none'
-            }}
-          >
-            Factures ({clientFactures.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('avoirs')}
-            style={{
-              padding: '8px 24px',
-              borderRadius: '980px',
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: '14px',
-              fontWeight: 600,
-              fontFamily: 'inherit',
-              transition: 'all .2s',
-              backgroundColor: activeTab === 'avoirs' ? '#ffffff' : 'transparent',
-              color: '#1d1d1f',
-              boxShadow: activeTab === 'avoirs' ? '0 2px 8px rgba(0,0,0,.08)' : 'none'
-            }}
-          >
-            Avoirs / Annulés ({clientAvoirs.length})
-          </button>
-        </div>
+        {/* Projects list */}
+        {projects.length === 0 ? (
+          <div style={{ backgroundColor: '#ffffff', border: '1px solid rgba(0,0,0,.08)', borderRadius: '24px', padding: '60px 20px', textAlign: 'center', color: '#86868b', fontSize: '14px' }}>
+            Aucun projet pour ce client.
+          </div>
+        ) : (
+          projects.map(project => {
+            const pStatus = getProjectStatus(project.quotes as any);
+            const pColors = projectStatusColors(pStatus);
+            const isCollapsed = !!collapsedProjects[project.id];
 
-        {/* Dynamic tabs folders panel view */}
-        
-        {/* TAB 1: DEVIS PANEL */}
-        {activeTab === 'devis' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            {clientDevis.length === 0 ? (
-              <div style={{ backgroundColor: '#ffffff', border: '1px solid rgba(0,0,0,.08)', borderRadius: '24px', padding: '50px 20px', textAlign: 'center', color: '#86868b', fontSize: '14px' }}>
-                Aucune demande de devis en cours d'évaluation pour ce client.
-              </div>
-            ) : (
-              clientDevis.map((q) => {
-                const isEditing = editingQuoteId === q.id;
+            const byDocType: Record<string, any[]> = {};
+            for (const q of project.quotes) {
+              const dt = (q as any).docType ?? 'devis';
+              if (!byDocType[dt]) byDocType[dt] = [];
+              byDocType[dt].push(q);
+            }
 
-                if (isEditing) {
-                  const { totalHT: liveHT, totalTTC: liveTTC, duration: liveDur, coeff: liveCoeff } = calculateEditTotals();
-                  return (
-                    <form key={q.id} onSubmit={handleSaveEdit} style={{ border: '2px solid #0071e3', borderRadius: '20px', padding: '30px', display: 'flex', flexDirection: 'column', gap: '20px', backgroundColor: '#fff', boxShadow: '0 8px 30px rgba(0,0,0,.05)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                          <div style={{ fontWeight: 800, fontSize: '16px', color: '#0071e3' }}>Modification du Devis #{q.id}</div>
-                          <div style={{ fontSize: '12px', color: '#86868b', marginTop: '2px' }}>Modifications soumises à la validation finale du client</div>
-                        </div>
-                        <span style={{ fontSize: '11px', fontWeight: 800, padding: '4px 10px', borderRadius: '980px', backgroundColor: '#e8f1fd', color: '#0071e3', textTransform: 'uppercase' }}>Mode Édition</span>
-                      </div>
+            const actionCount = project.quotes.filter(
+              (q: any) => q.status === 'pending' || q.status === 'modified_by_admin' || q.status === 'pdf_pending'
+            ).length;
 
-                      {/* Dates */}
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                          <label style={{ fontSize: '13px', fontWeight: 600 }}>Date de début</label>
-                          <input
-                            type="date"
-                            value={editStartDate}
-                            onChange={e => setEditStartDate(e.target.value)}
-                            style={{ padding: '10px 16px', borderRadius: '980px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '14px', fontFamily: 'inherit' }}
-                            required
-                          />
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                          <label style={{ fontSize: '13px', fontWeight: 600 }}>Date de fin</label>
-                          <input
-                            type="date"
-                            value={editEndDate}
-                            onChange={e => setEditEndDate(e.target.value)}
-                            style={{ padding: '10px 16px', borderRadius: '980px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '14px', fontFamily: 'inherit' }}
-                            required
-                          />
-                        </div>
-                      </div>
+            return (
+              <div key={project.id} style={{ backgroundColor: '#ffffff', border: '1px solid rgba(0,0,0,.08)', borderRadius: '24px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,.02)' }}>
 
-                      {/* Client remarks */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <label style={{ fontSize: '13px', fontWeight: 600 }}>Notes ou remarques du dossier</label>
-                        <textarea
-                          rows={3}
-                          value={editNotes}
-                          onChange={e => setEditNotes(e.target.value)}
-                          placeholder="Instructions spéciales, notes sur la livraison..."
-                          style={{ padding: '12px 18px', borderRadius: '16px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '14px', fontFamily: 'inherit', resize: 'vertical' }}
-                        />
-                      </div>
-
-                      {/* Items lists */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                        <label style={{ fontSize: '13px', fontWeight: 600 }}>Articles du devis :</label>
-                        <div style={{ border: '1px solid rgba(0,0,0,.08)', borderRadius: '16px', overflow: 'hidden' }}>
-                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
-                            <thead>
-                              <tr style={{ backgroundColor: '#f5f5f7', borderBottom: '1px solid rgba(0,0,0,.06)', fontWeight: 600 }}>
-                                <th style={{ padding: '12px 20px' }}>Matériel</th>
-                                <th style={{ padding: '12px 20px' }}>Quantité</th>
-                                <th style={{ padding: '12px 20px', textAlign: 'right' }}>Tarif (HT)</th>
-                                <th style={{ padding: '12px 20px', width: '50px' }}></th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {editItems.map((it, idx) => (
-                                <tr key={idx} style={{ borderBottom: idx < editItems.length - 1 ? '1px solid rgba(0,0,0,.04)' : 'none' }}>
-                                  <td style={{ padding: '12px 20px' }}><strong>{it.brand}</strong> - {it.name}</td>
-                                  <td style={{ padding: '12px 20px' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                      <button type="button" onClick={() => handleUpdateEditItemQty(it.id, -1)} style={{ border: '1px solid #d1d1d6', backgroundColor: '#fff', borderRadius: '6px', cursor: 'pointer', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600 }}>-</button>
-                                      <span style={{ fontWeight: 700, minWidth: '20px', textAlign: 'center' }}>{it.quantity}</span>
-                                      <button type="button" onClick={() => handleUpdateEditItemQty(it.id, 1)} style={{ border: '1px solid #d1d1d6', backgroundColor: '#fff', borderRadius: '6px', cursor: 'pointer', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600 }}>+</button>
-                                    </div>
-                                  </td>
-                                  <td style={{ padding: '12px 20px', textAlign: 'right' }}>
-                                    {it.priceType === 'on_request' ? (
-                                      <span style={{ color: '#86868b' }}>Sur devis</span>
-                                    ) : (
-                                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                        <input
-                                          type="number"
-                                          value={it.price}
-                                          onChange={e => handleUpdateEditItemPrice(it.id, Number(e.target.value))}
-                                          style={{ width: '70px', padding: '4px 8px', borderRadius: '6px', border: '1px solid rgba(0,0,0,.15)', outline: 'none', textAlign: 'right' }}
-                                          min="0"
-                                          step="0.01"
-                                        />
-                                        <span>€</span>
-                                      </div>
-                                    )}
-                                  </td>
-                                  <td style={{ padding: '12px 20px', textAlign: 'center' }}>
-                                    <button type="button" onClick={() => handleRemoveEditItem(it.id)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#ef4444' }}>
-                                      <Trash2 style={{ width: '16px', height: '16px' }} />
-                                    </button>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-
-                        {/* Add line */}
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '6px' }}>
-                          <select
-                            value={editAddItemSelect}
-                            onChange={e => setEditAddItemSelect(e.target.value)}
-                            style={{ flex: 1, padding: '10px 16px', borderRadius: '980px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '13px' }}
-                          >
-                            <option value="">-- Choisir un équipement à ajouter --</option>
-                            {equipment.map(e => (
-                              <option key={e.id} value={e.id}>
-                                {e.brand} - {e.name} ({e.priceType === 'on_request' ? 'Sur devis' : `${e.price} € ${e.priceTax}`})
-                              </option>
-                            ))}
-                          </select>
-                          <button
-                            type="button"
-                            onClick={() => handleAddEditItem(editAddItemSelect)}
-                            style={{ padding: '10px 22px', borderRadius: '980px', backgroundColor: '#1d1d1f', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '13px', whiteSpace: 'nowrap' }}
-                          >
-                            + Ajouter
-                          </button>
-                        </div>
-
-                        {/* Discount */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '12px', maxWidth: '300px' }}>
-                          <label style={{ fontSize: '13px', fontWeight: 600, whiteSpace: 'nowrap' }}>Remise / Promo (%) :</label>
-                          <input
-                            type="number"
-                            value={editDiscount}
-                            onChange={e => setEditDiscount(Math.max(0, Math.min(100, Number(e.target.value))))}
-                            style={{ width: '80px', padding: '6px 12px', borderRadius: '980px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', textAlign: 'center', fontSize: '13px' }}
-                            min="0"
-                            max="100"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Summary */}
-                      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '20px', borderTop: '1px solid rgba(0,0,0,.06)', paddingTop: '20px' }}>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', fontSize: '14px', color: '#6e6e73' }}>
-                          <div>Durée : <strong>{liveDur} jour{liveDur > 1 ? 's' : ''}</strong></div>
-                          <div>Coefficient : <strong>x{liveCoeff.toFixed(2)}</strong></div>
-                          <div>Total Estimé HT : <strong style={{ color: '#1d1d1f', fontSize: '16px' }}>{liveHT.toLocaleString('fr-FR')} €</strong></div>
-                          <div>Total TTC : <strong style={{ color: '#86868b' }}>{liveTTC.toLocaleString('fr-FR')} €</strong></div>
-                        </div>
-
-                        <div style={{ display: 'flex', gap: '10px' }}>
-                          <button
-                            type="submit"
-                            disabled={actionLoading === q.id}
-                            style={{ padding: '10px 22px', borderRadius: '980px', backgroundColor: '#0071e3', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                          >
-                            {actionLoading === q.id ? <Loader2 style={{ width: '14px', height: '14px', animation: 'spin 1s linear infinite' }} /> : 'Enregistrer'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setEditingQuoteId(null)}
-                            style={{ padding: '10px 22px', borderRadius: '980px', backgroundColor: '#e8e8ed', color: '#1d1d1f', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '13px' }}
-                          >
-                            Annuler
-                          </button>
-                        </div>
-                      </div>
-                    </form>
-                  );
-                }
-
-                // Normal template view
-                return (
-                  <div key={q.id} style={{ backgroundColor: '#ffffff', border: `1px solid ${q.status === 'pdf_pending' ? 'rgba(217,119,6,.35)' : 'rgba(0,0,0,.08)'}`, borderRadius: '20px', overflow: 'hidden', boxShadow: q.status === 'pdf_pending' ? '0 0 0 3px rgba(217,119,6,.08)' : '0 4px 18px rgba(0,0,0,.01)' }}>
-                    {/* Banner for pdf_pending */}
-                    {q.status === 'pdf_pending' && (
-                      <div style={{ backgroundColor: '#fef3c7', borderBottom: '1px solid rgba(217,119,6,.2)', padding: '10px 26px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Upload style={{ width: '16px', height: '16px', color: '#b45309', flexShrink: 0 }} />
-                        <span style={{ fontSize: '13px', fontWeight: 700, color: '#92400e' }}>Action requise — Envoi du PDF en cours. Uploadez le document signé ci-dessous.</span>
-                      </div>
-                    )}
-                    <div style={{ padding: '26px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
-                      <div>
-                        <div style={{ fontWeight: 800, fontSize: '15px' }}>Devis #{q.id}</div>
-                        <div style={{ fontSize: '12px', color: '#86868b', marginTop: '2px' }}>Demandé le {new Date(q.createdAt).toLocaleDateString('fr-FR')}</div>
-                      </div>
-
-                      {/* State badge */}
-                      <span style={{
-                        fontSize: '11px',
-                        fontWeight: 700,
-                        padding: '4px 12px',
-                        borderRadius: '980px',
-                        backgroundColor:
-                          q.status === 'pending' ? '#fff3cd' :
-                          q.status === 'modified_by_admin' ? '#e8f1fd' :
-                          '#fef3c7',
-                        color:
-                          q.status === 'pending' ? '#856404' :
-                          q.status === 'modified_by_admin' ? '#0071e3' :
-                          '#b45309',
-                        textTransform: 'uppercase'
-                      }}>
-                        {q.status === 'pending' && "En attente d'étude"}
-                        {q.status === 'modified_by_admin' && "Modifié (validation client requise)"}
-                        {q.status === 'pdf_pending' && "Envoi de devis en cours"}
-                      </span>
+                {/* Project header — click to collapse/expand */}
+                <div
+                  onClick={() => setCollapsedProjects(prev => ({ ...prev, [project.id]: !prev[project.id] }))}
+                  style={{ padding: '20px 26px', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '12px', cursor: 'pointer', borderBottom: isCollapsed ? 'none' : '1px solid rgba(0,0,0,.06)', userSelect: 'none' }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                    <div style={{ width: '40px', height: '40px', borderRadius: '12px', backgroundColor: '#1d1d1f', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <PackageCheck style={{ width: '20px', height: '20px', color: '#fff' }} />
                     </div>
-
-                    {/* Rental Period */}
-                    <div style={{ display: 'flex', gap: '16px', backgroundColor: '#f5f5f7', borderRadius: '12px', padding: '14px 18px', fontSize: '13px' }}>
-                      <div>
-                        <span style={{ fontWeight: 700, color: '#6e6e73' }}>Période de location : </span>
-                        <span>du {new Date(q.startDate).toLocaleDateString('fr-FR')} au {new Date(q.endDate).toLocaleDateString('fr-FR')}</span>
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: '16px', color: '#1d1d1f' }}>{project.name}</div>
+                      <div style={{ fontSize: '12px', color: '#86868b', marginTop: '3px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Calendar style={{ width: '11px', height: '11px' }} />
+                        {new Date(project.rentalStart).toLocaleDateString('fr-FR')} — {new Date(project.rentalEnd).toLocaleDateString('fr-FR')}
+                        <span style={{ opacity: 0.4 }}>·</span>
+                        {project.quotes.length} document{project.quotes.length > 1 ? 's' : ''}
                       </div>
-                      {q.discount > 0 && (
-                        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '3px', color: '#15803d', fontWeight: 700 }}>
-                          <Percent style={{ width: '14px', height: '14px' }} /> Remise de {q.discount}% appliquée
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Notes */}
-                    {q.notes && (
-                      <div style={{ fontSize: '13px', fontStyle: 'italic', color: '#6e6e73', borderLeft: '3px solid #0071e3', paddingLeft: '12px', margin: '4px 0' }}>
-                        "{q.notes}"
-                      </div>
-                    )}
-
-                    {/* Table of items */}
-                    <div style={{ border: '1px solid rgba(0,0,0,.04)', borderRadius: '12px', overflow: 'hidden' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
-                        <thead>
-                          <tr style={{ backgroundColor: '#f5f5f7', borderBottom: '1px solid rgba(0,0,0,.06)', fontWeight: 600 }}>
-                            <th style={{ padding: '8px 16px' }}>Matériel</th>
-                            <th style={{ padding: '8px 16px' }}>Quantité</th>
-                            <th style={{ padding: '8px 16px', textAlign: 'right' }}>Tarif Unitaire (HT)</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {q.items.map((it, idx) => (
-                            <tr key={idx} style={{ borderBottom: idx < q.items.length - 1 ? '1px solid rgba(0,0,0,.04)' : 'none' }}>
-                              <td style={{ padding: '8px 16px' }}><strong>{it.brand}</strong> - {it.name}</td>
-                              <td style={{ padding: '8px 16px' }}>{it.quantity}</td>
-                              <td style={{ padding: '8px 16px', textAlign: 'right' }}>
-                                {it.priceType === 'on_request' ? 'Sur devis' : `${it.price.toLocaleString('fr-FR')} €`}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    {/* Action rows & pricing */}
-                    <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '16px', borderTop: '1px solid rgba(0,0,0,.06)', paddingTop: '16px', marginTop: '4px' }}>
-                      <div style={{ display: 'flex', gap: '20px', fontSize: '14px' }}>
-                        <div>
-                          <span style={{ color: '#86868b' }}>Total HT : </span>
-                          <strong style={{ color: '#1d1d1f', fontSize: '16px' }}>{q.totalHT.toLocaleString('fr-FR')} €</strong>
-                        </div>
-                        <div>
-                          <span style={{ color: '#86868b' }}>Total TTC : </span>
-                          <strong style={{ color: '#86868b' }}>{q.totalTTC.toLocaleString('fr-FR')} €</strong>
-                        </div>
-                      </div>
-
-                      {/* Status-specific actions */}
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-                        {q.status === 'pending' && (
-                          <>
-                            <button
-                              onClick={() => handleUpdateStatus(q.id, 'pdf_pending')}
-                              disabled={actionLoading === q.id}
-                              style={{ padding: '10px 20px', borderRadius: '980px', backgroundColor: '#1db954', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                            >
-                              {actionLoading === q.id ? <Loader2 style={{ width: '14px', height: '14px', animation: 'spin 1s linear infinite' }} /> : 'Valider'}
-                            </button>
-                            <button
-                              onClick={() => startEditing(q)}
-                              disabled={actionLoading === q.id}
-                              style={{ padding: '10px 20px', borderRadius: '980px', backgroundColor: '#f5f5f7', color: '#1d1d1f', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '13px' }}
-                            >
-                              Modifier
-                            </button>
-                            <button
-                              onClick={() => handleUpdateStatus(q.id, 'cancelled')}
-                              disabled={actionLoading === q.id}
-                              style={{ padding: '10px 20px', borderRadius: '980px', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #ef4444', cursor: 'pointer', fontWeight: 600, fontSize: '13px' }}
-                            >
-                              Refuser
-                            </button>
-                          </>
-                        )}
-
-                        {q.status === 'modified_by_admin' && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: '12px', color: '#6e6e73', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                              <AlertTriangle style={{ width: '14px', height: '14px', color: '#b78103' }} /> Modifié. En attente client.
-                            </span>
-                            <button
-                              onClick={() => handleUpdateStatus(q.id, 'pdf_pending')}
-                              disabled={actionLoading === q.id}
-                              style={{ padding: '8px 16px', borderRadius: '980px', backgroundColor: '#1db954', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                            >
-                              {actionLoading === q.id ? <Loader2 style={{ width: '12px', height: '12px', animation: 'spin 1s linear infinite' }} /> : 'Valider'}
-                            </button>
-                            <button
-                              onClick={() => startEditing(q)}
-                              disabled={actionLoading === q.id}
-                              style={{ padding: '8px 16px', borderRadius: '980px', backgroundColor: '#f5f5f7', color: '#1d1d1f', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '12px' }}
-                            >
-                              Modifier à nouveau
-                            </button>
-                            <button
-                              onClick={() => handleUpdateStatus(q.id, 'cancelled')}
-                              disabled={actionLoading === q.id}
-                              style={{ padding: '8px 16px', borderRadius: '980px', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #ef4444', cursor: 'pointer', fontWeight: 600, fontSize: '12px' }}
-                            >
-                              Annuler le devis
-                            </button>
-                          </div>
-                        )}
-
-                        {q.status === 'pdf_pending' && (
-                          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px', backgroundColor: '#fff8ed', borderRadius: '16px', padding: '12px 16px', border: '1px solid rgba(234,179,8,.25)', width: '100%' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 700, color: '#b45309', flexBasis: '100%' }}>
-                              <Upload style={{ width: '16px', height: '16px' }} /> Uploader le fichier PDF du devis signé :
-                            </div>
-                            <input
-                              type="file"
-                              accept="application/pdf"
-                              onChange={e => setPdfFileMap(prev => ({ ...prev, [q.id]: e.target.files?.[0] ?? null }))}
-                              style={{ fontSize: '12px', flex: 1, minWidth: '200px', cursor: 'pointer' }}
-                            />
-                            <button
-                              onClick={() => handleUploadPdf(q.id)}
-                              disabled={actionLoading === q.id || !pdfFileMap[q.id]}
-                              style={{ padding: '7px 16px', borderRadius: '980px', backgroundColor: pdfFileMap[q.id] ? '#d97706' : '#e5e7eb', color: pdfFileMap[q.id] ? '#fff' : '#9ca3af', border: 'none', cursor: pdfFileMap[q.id] ? 'pointer' : 'default', fontWeight: 700, fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '5px', transition: 'background .15s', flexShrink: 0 }}
-                            >
-                              {actionLoading === q.id ? <Loader2 style={{ width: '12px', height: '12px', animation: 'spin 1s linear infinite' }} /> : <Upload style={{ width: '12px', height: '12px' }} />}
-                              Envoyer le PDF
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
                     </div>
                   </div>
-                );
-              })
-            )}
-          </div>
-        )}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {actionCount > 0 && (
+                      <span style={{ fontSize: '11px', fontWeight: 800, backgroundColor: '#0071e3', color: '#fff', padding: '3px 9px', borderRadius: '980px' }}>
+                        {actionCount} action{actionCount > 1 ? 's' : ''}
+                      </span>
+                    )}
+                    <span style={{ fontSize: '11px', fontWeight: 700, padding: '4px 12px', borderRadius: '980px', backgroundColor: pColors.bg, color: pColors.color }}>
+                      {projectStatusLabel(pStatus)}
+                    </span>
+                    {isCollapsed
+                      ? <ChevronDown style={{ width: '16px', height: '16px', color: '#86868b' }} />
+                      : <ChevronUp style={{ width: '16px', height: '16px', color: '#86868b' }} />
+                    }
+                  </div>
+                </div>
 
-        {/* TAB 2: FACTURES PANEL (Validated quotes with PDF Attached) */}
-        {activeTab === 'factures' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            {clientFactures.length === 0 ? (
-              <div style={{ backgroundColor: '#ffffff', border: '1px solid rgba(0,0,0,.08)', borderRadius: '24px', padding: '50px 20px', textAlign: 'center', color: '#86868b', fontSize: '14px' }}>
-                Aucune facture disponible (devis validé avec PDF) pour ce client.
-              </div>
-            ) : (
-              <div style={{ backgroundColor: '#ffffff', border: '1px solid rgba(0,0,0,.08)', borderRadius: '24px', padding: '20px', boxShadow: '0 4px 20px rgba(0,0,0,.02)', overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '600px', fontSize: '13px' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid rgba(0,0,0,.06)', backgroundColor: '#f5f5f7', fontWeight: 700, color: '#86868b', textTransform: 'uppercase', letterSpacing: '.06em' }}>
-                      <th style={{ padding: '14px 20px' }}>N° Facture (Devis)</th>
-                      <th style={{ padding: '14px 20px' }}>Période de location</th>
-                      <th style={{ padding: '14px 20px' }}>Articles</th>
-                      <th style={{ padding: '14px 20px', textAlign: 'right' }}>Total (HT)</th>
-                      <th style={{ padding: '14px 20px', textAlign: 'right' }}>Total (TTC)</th>
-                      <th style={{ padding: '14px 20px', textAlign: 'center' }}>Document PDF</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {clientFactures.map((q) => (
-                      <tr key={q.id} style={{ borderBottom: '1px solid rgba(0,0,0,.04)' }}>
-                        <td style={{ padding: '16px 20px', fontWeight: 800 }}>FACT-{q.id}</td>
-                        <td style={{ padding: '16px 20px' }}>
-                          du {new Date(q.startDate).toLocaleDateString('fr-FR')} au {new Date(q.endDate).toLocaleDateString('fr-FR')}
-                        </td>
-                        <td style={{ padding: '16px 20px' }}>
-                          <span style={{ fontWeight: 600 }}>{q.items.reduce((sum, it) => sum + it.quantity, 0)} articles</span>
-                        </td>
-                        <td style={{ padding: '16px 20px', fontWeight: 700, textAlign: 'right' }}>
-                          {q.totalHT.toLocaleString('fr-FR')} €
-                        </td>
-                        <td style={{ padding: '16px 20px', fontWeight: 700, textAlign: 'right', color: '#15803d' }}>
-                          {q.totalTTC.toLocaleString('fr-FR')} €
-                        </td>
-                        <td style={{ padding: '16px 20px', textAlign: 'center' }}>
-                          {q.pdfUrl ? (
-                            <a
-                              href={`/api/quotes/${q.id}/pdf`}
-                              target="_blank"
-                              rel="noreferrer"
-                              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '8px', backgroundColor: '#e2fbe8', color: '#1db954', textDecoration: 'none', fontWeight: 700, fontSize: '12px' }}
-                            >
-                              <Download style={{ width: '14px', height: '14px' }} /> Télécharger
-                            </a>
-                          ) : (
-                            <span style={{ color: '#86868b', fontSize: '12px', fontStyle: 'italic' }}>Aucun fichier</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
+                {/* Project body */}
+                {!isCollapsed && (
+                  <div style={{ padding: '24px 26px', display: 'flex', flexDirection: 'column', gap: '28px' }}>
+                    {DOC_ORDER.map(dt => {
+                      const docs = byDocType[dt];
+                      if (!docs || docs.length === 0) return null;
+                      const meta = DOC_META[dt];
 
-        {/* TAB 3: AVOIRS / ANNULÉS PANEL */}
-        {activeTab === 'avoirs' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            {clientAvoirs.length === 0 ? (
-              <div style={{ backgroundColor: '#ffffff', border: '1px solid rgba(0,0,0,.08)', borderRadius: '24px', padding: '50px 20px', textAlign: 'center', color: '#86868b', fontSize: '14px' }}>
-                Aucun devis refusé ou annulé pour ce client.
+                      return (
+                        <div key={dt}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', paddingBottom: '10px', borderBottom: '1px solid rgba(0,0,0,.05)' }}>
+                            <span style={{ fontWeight: 800, fontSize: '13px', color: meta.color }}>{meta.label}</span>
+                            <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '980px', backgroundColor: meta.bg, color: meta.color }}>{docs.length}</span>
+                          </div>
+
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+
+                            {/* ── DEVIS ── */}
+                            {dt === 'devis' && docs.map((q: any) => {
+                              const isEditing = editingQuoteId === q.id;
+
+                              if (isEditing) {
+                                const { totalHT: liveHT, totalTTC: liveTTC, duration: liveDur, coeff: liveCoeff } = calculateEditTotals();
+                                return (
+                                  <form key={q.id} onSubmit={handleSaveEdit} style={{ border: '2px solid #0071e3', borderRadius: '16px', padding: '22px', display: 'flex', flexDirection: 'column', gap: '18px', backgroundColor: '#fff' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                      <div style={{ fontWeight: 800, fontSize: '14px', color: '#0071e3' }}>Modification #{q.id}</div>
+                                      <span style={{ fontSize: '11px', fontWeight: 800, padding: '3px 10px', borderRadius: '980px', backgroundColor: '#e8f1fd', color: '#0071e3', textTransform: 'uppercase' as const }}>Mode Édition</span>
+                                    </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px' }}>
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                                        <label style={{ fontSize: '12px', fontWeight: 600 }}>Date de début</label>
+                                        <input type="date" value={editStartDate} onChange={e => setEditStartDate(e.target.value)} style={{ padding: '9px 14px', borderRadius: '980px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '13px', fontFamily: 'inherit' }} required />
+                                      </div>
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                                        <label style={{ fontSize: '12px', fontWeight: 600 }}>Date de fin</label>
+                                        <input type="date" value={editEndDate} onChange={e => setEditEndDate(e.target.value)} style={{ padding: '9px 14px', borderRadius: '980px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '13px', fontFamily: 'inherit' }} required />
+                                      </div>
+                                    </div>
+                                    <textarea rows={2} value={editNotes} onChange={e => setEditNotes(e.target.value)} placeholder="Notes..." style={{ padding: '10px 14px', borderRadius: '12px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '13px', fontFamily: 'inherit', resize: 'vertical' }} />
+                                    <div style={{ border: '1px solid rgba(0,0,0,.08)', borderRadius: '10px', overflow: 'hidden' }}>
+                                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
+                                        <thead>
+                                          <tr style={{ backgroundColor: '#f5f5f7', borderBottom: '1px solid rgba(0,0,0,.06)', fontWeight: 600 }}>
+                                            <th style={{ padding: '8px 14px' }}>Matériel</th>
+                                            <th style={{ padding: '8px 14px' }}>Qté</th>
+                                            <th style={{ padding: '8px 14px', textAlign: 'right' }}>HT</th>
+                                            <th style={{ padding: '8px 14px', width: '36px' }}></th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {editItems.map((it, idx) => (
+                                            <tr key={idx} style={{ borderBottom: idx < editItems.length - 1 ? '1px solid rgba(0,0,0,.04)' : 'none' }}>
+                                              <td style={{ padding: '8px 14px' }}><strong>{it.brand}</strong> - {it.name}</td>
+                                              <td style={{ padding: '8px 14px' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                  <button type="button" onClick={() => handleUpdateEditItemQty(it.id, -1)} style={{ border: '1px solid #d1d1d6', backgroundColor: '#fff', borderRadius: '5px', cursor: 'pointer', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: '11px' }}>-</button>
+                                                  <span style={{ fontWeight: 700, minWidth: '16px', textAlign: 'center', fontSize: '12px' }}>{it.quantity}</span>
+                                                  <button type="button" onClick={() => handleUpdateEditItemQty(it.id, 1)} style={{ border: '1px solid #d1d1d6', backgroundColor: '#fff', borderRadius: '5px', cursor: 'pointer', width: '20px', height: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: '11px' }}>+</button>
+                                                </div>
+                                              </td>
+                                              <td style={{ padding: '8px 14px', textAlign: 'right' }}>
+                                                {it.priceType === 'on_request' ? <span style={{ color: '#86868b' }}>Sur devis</span> : (
+                                                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                                    <input type="number" value={it.price} onChange={e => handleUpdateEditItemPrice(it.id, Number(e.target.value))} style={{ width: '60px', padding: '3px 6px', borderRadius: '5px', border: '1px solid rgba(0,0,0,.15)', outline: 'none', textAlign: 'right', fontSize: '12px' }} min="0" step="0.01" />
+                                                    <span>€</span>
+                                                  </div>
+                                                )}
+                                              </td>
+                                              <td style={{ padding: '8px 14px', textAlign: 'center' }}>
+                                                <button type="button" onClick={() => handleRemoveEditItem(it.id)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#ef4444', display: 'flex' }}>
+                                                  <Trash2 style={{ width: '13px', height: '13px' }} />
+                                                </button>
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                      <select value={editAddItemSelect} onChange={e => setEditAddItemSelect(e.target.value)} style={{ flex: 1, padding: '8px 12px', borderRadius: '980px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '12px' }}>
+                                        <option value="">-- Ajouter un équipement --</option>
+                                        {equipment.map(e => <option key={e.id} value={e.id}>{e.brand} - {e.name} ({e.priceType === 'on_request' ? 'Sur devis' : `${e.price} € ${e.priceTax}`})</option>)}
+                                      </select>
+                                      <button type="button" onClick={() => handleAddEditItem(editAddItemSelect)} style={{ padding: '8px 16px', borderRadius: '980px', backgroundColor: '#1d1d1f', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '12px', whiteSpace: 'nowrap' }}>+ Ajouter</button>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                      <Percent style={{ width: '13px', height: '13px', color: '#86868b' }} />
+                                      <label style={{ fontSize: '12px', fontWeight: 600, whiteSpace: 'nowrap' }}>Remise</label>
+                                      <input type="number" value={editDiscount} onChange={e => setEditDiscount(Math.max(0, Math.min(100, Number(e.target.value))))} style={{ width: '65px', padding: '5px 8px', borderRadius: '980px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', textAlign: 'center', fontSize: '12px' }} min="0" max="100" />
+                                      <span style={{ fontSize: '12px', color: '#86868b' }}>%</span>
+                                    </div>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '12px', borderTop: '1px solid rgba(0,0,0,.06)', paddingTop: '14px' }}>
+                                      <div style={{ display: 'flex', gap: '10px', fontSize: '12px', color: '#6e6e73', flexWrap: 'wrap' }}>
+                                        <span>Durée : <strong>{liveDur}j</strong></span>
+                                        <span>Coeff : <strong>×{liveCoeff.toFixed(2)}</strong></span>
+                                        <span>HT : <strong style={{ color: '#1d1d1f', fontSize: '14px' }}>{liveHT.toLocaleString('fr-FR')} €</strong></span>
+                                        <span>TTC : <strong style={{ color: '#86868b' }}>{liveTTC.toLocaleString('fr-FR')} €</strong></span>
+                                      </div>
+                                      <div style={{ display: 'flex', gap: '8px' }}>
+                                        <button type="submit" disabled={actionLoading === q.id} style={{ padding: '8px 18px', borderRadius: '980px', backgroundColor: '#0071e3', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                                          {actionLoading === q.id ? <Loader2 style={{ width: '12px', height: '12px', animation: 'spin 1s linear infinite' }} /> : 'Enregistrer'}
+                                        </button>
+                                        <button type="button" onClick={() => setEditingQuoteId(null)} style={{ padding: '8px 16px', borderRadius: '980px', backgroundColor: '#e8e8ed', color: '#1d1d1f', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '13px' }}>Annuler</button>
+                                      </div>
+                                    </div>
+                                  </form>
+                                );
+                              }
+
+                              // Normal devis card
+                              return (
+                                <div key={q.id} style={{ border: `1px solid ${q.status === 'locked' ? 'rgba(29,185,84,.25)' : q.status === 'pdf_pending' ? 'rgba(217,119,6,.3)' : 'rgba(0,0,0,.07)'}`, borderRadius: '14px', overflow: 'hidden' }}>
+                                  {q.status === 'pdf_pending' && (
+                                    <div style={{ backgroundColor: '#fef3c7', borderBottom: '1px solid rgba(217,119,6,.2)', padding: '9px 18px', display: 'flex', alignItems: 'center', gap: '7px' }}>
+                                      <Upload style={{ width: '13px', height: '13px', color: '#b45309', flexShrink: 0 }} />
+                                      <span style={{ fontSize: '12px', fontWeight: 700, color: '#92400e' }}>Action requise — Uploadez le PDF du devis signé.</span>
+                                    </div>
+                                  )}
+                                  <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                                      <div>
+                                        <div style={{ fontWeight: 800, fontSize: '13px' }}>#{q.id}</div>
+                                        <div style={{ fontSize: '11px', color: '#86868b', marginTop: '2px' }}>Créé le {new Date(q.createdAt).toLocaleDateString('fr-FR')}</div>
+                                      </div>
+                                      <span style={{
+                                        fontSize: '11px', fontWeight: 700, padding: '3px 10px', borderRadius: '980px', textTransform: 'uppercase' as const,
+                                        backgroundColor: q.status === 'pending' ? '#fff3cd' : q.status === 'modified_by_admin' ? '#e8f1fd' : q.status === 'validated' ? '#f0fdf4' : q.status === 'locked' ? '#e2fbe8' : q.status === 'cancelled' ? '#fef2f2' : '#fef3c7',
+                                        color: q.status === 'pending' ? '#856404' : q.status === 'modified_by_admin' ? '#0071e3' : q.status === 'validated' ? '#15803d' : q.status === 'locked' ? '#1db954' : q.status === 'cancelled' ? '#ef4444' : '#b45309',
+                                      }}>
+                                        {q.status === 'pending' ? 'En attente' : q.status === 'modified_by_admin' ? 'Modifié — attente client' : q.status === 'pdf_pending' ? 'PDF en cours' : q.status === 'validated' ? 'Validé' : q.status === 'locked' ? 'Règlement reçu ✓' : q.status === 'cancelled' ? 'Annulé' : q.status}
+                                      </span>
+                                    </div>
+                                    <div style={{ fontSize: '12px', color: '#6e6e73', backgroundColor: '#f5f5f7', padding: '8px 12px', borderRadius: '8px', display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+                                      <span>{new Date(q.startDate).toLocaleDateString('fr-FR')} → {new Date(q.endDate).toLocaleDateString('fr-FR')}</span>
+                                      {q.discount > 0 && <span style={{ color: '#15803d', fontWeight: 700, marginLeft: 'auto' }}>Remise {q.discount}%</span>}
+                                    </div>
+                                    {q.notes && <div style={{ fontSize: '12px', color: '#6e6e73', fontStyle: 'italic', borderLeft: '3px solid #0071e3', paddingLeft: '8px' }}>"{q.notes}"</div>}
+                                    <div style={{ border: '1px solid rgba(0,0,0,.05)', borderRadius: '8px', overflow: 'hidden', fontSize: '12px' }}>
+                                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                                        <thead>
+                                          <tr style={{ backgroundColor: '#f5f5f7', borderBottom: '1px solid rgba(0,0,0,.06)', fontWeight: 600 }}>
+                                            <th style={{ padding: '7px 12px' }}>Matériel</th>
+                                            <th style={{ padding: '7px 12px' }}>Qté</th>
+                                            <th style={{ padding: '7px 12px', textAlign: 'right' }}>HT</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {q.items.map((it: any, idx: number) => (
+                                            <tr key={idx} style={{ borderBottom: idx < q.items.length - 1 ? '1px solid rgba(0,0,0,.04)' : 'none' }}>
+                                              <td style={{ padding: '6px 12px' }}><strong>{it.brand}</strong> - {it.name}</td>
+                                              <td style={{ padding: '6px 12px' }}>{it.quantity}</td>
+                                              <td style={{ padding: '6px 12px', textAlign: 'right' }}>{it.priceType === 'on_request' ? 'Sur devis' : `${it.price.toLocaleString('fr-FR')} €`}</td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '10px', borderTop: '1px solid rgba(0,0,0,.05)', paddingTop: '10px' }}>
+                                      <div style={{ fontSize: '13px', display: 'flex', gap: '12px' }}>
+                                        <span>HT : <strong style={{ color: '#1d1d1f', fontSize: '14px' }}>{q.totalHT.toLocaleString('fr-FR')} €</strong></span>
+                                        <span style={{ color: '#86868b' }}>TTC : <strong>{q.totalTTC.toLocaleString('fr-FR')} €</strong></span>
+                                      </div>
+                                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
+                                        {q.status === 'pending' && (
+                                          <>
+                                            <button onClick={() => handleUpdateStatus(q.id, 'pdf_pending')} disabled={actionLoading === q.id} style={{ padding: '7px 14px', borderRadius: '980px', backgroundColor: '#1db954', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                              {actionLoading === q.id ? <Loader2 style={{ width: '11px', height: '11px', animation: 'spin 1s linear infinite' }} /> : 'Valider'}
+                                            </button>
+                                            <button onClick={() => startEditing(q as unknown as Quote)} disabled={actionLoading === q.id} style={{ padding: '7px 12px', borderRadius: '980px', backgroundColor: '#f5f5f7', color: '#1d1d1f', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '12px' }}>Modifier</button>
+                                            <button onClick={() => handleUpdateStatus(q.id, 'cancelled')} disabled={actionLoading === q.id} style={{ padding: '7px 12px', borderRadius: '980px', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #ef4444', cursor: 'pointer', fontWeight: 600, fontSize: '12px' }}>Refuser</button>
+                                          </>
+                                        )}
+                                        {q.status === 'modified_by_admin' && (
+                                          <>
+                                            <span style={{ fontSize: '11px', color: '#6e6e73', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                              <AlertTriangle style={{ width: '11px', height: '11px', color: '#b78103' }} /> Attente client
+                                            </span>
+                                            <button onClick={() => handleUpdateStatus(q.id, 'pdf_pending')} disabled={actionLoading === q.id} style={{ padding: '7px 12px', borderRadius: '980px', backgroundColor: '#1db954', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                              {actionLoading === q.id ? <Loader2 style={{ width: '11px', height: '11px', animation: 'spin 1s linear infinite' }} /> : 'Valider'}
+                                            </button>
+                                            <button onClick={() => startEditing(q as unknown as Quote)} disabled={actionLoading === q.id} style={{ padding: '7px 12px', borderRadius: '980px', backgroundColor: '#f5f5f7', color: '#1d1d1f', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '12px' }}>Modifier</button>
+                                            <button onClick={() => handleUpdateStatus(q.id, 'cancelled')} disabled={actionLoading === q.id} style={{ padding: '7px 12px', borderRadius: '980px', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #ef4444', cursor: 'pointer', fontWeight: 600, fontSize: '12px' }}>Annuler</button>
+                                          </>
+                                        )}
+                                        {q.status === 'pdf_pending' && (
+                                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', width: '100%' }}>
+                                            <input type="file" accept="application/pdf" onChange={e => setPdfFileMap(prev => ({ ...prev, [q.id]: e.target.files?.[0] ?? null }))} style={{ fontSize: '12px', flex: 1, minWidth: '140px', cursor: 'pointer' }} />
+                                            <button onClick={() => handleUploadPdf(q.id)} disabled={actionLoading === q.id || !pdfFileMap[q.id]} style={{ padding: '7px 12px', borderRadius: '980px', backgroundColor: pdfFileMap[q.id] ? '#d97706' : '#e5e7eb', color: pdfFileMap[q.id] ? '#fff' : '#9ca3af', border: 'none', cursor: pdfFileMap[q.id] ? 'pointer' : 'default', fontWeight: 700, fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                              {actionLoading === q.id ? <Loader2 style={{ width: '11px', height: '11px', animation: 'spin 1s linear infinite' }} /> : <Upload style={{ width: '11px', height: '11px' }} />} PDF
+                                            </button>
+                                          </div>
+                                        )}
+                                        {q.status === 'validated' && (() => {
+                                          const hasFacture = quotes.some(f => f.docType === 'facture' && f.linkedDevisId === q.id);
+                                          return (
+                                            <>
+                                              {!hasFacture && (
+                                                <button onClick={() => handleCreateFacture(q.id)} disabled={actionLoading === q.id + '-facture'} style={{ padding: '7px 14px', borderRadius: '980px', backgroundColor: '#0071e3', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                                  {actionLoading === q.id + '-facture' ? <Loader2 style={{ width: '11px', height: '11px', animation: 'spin 1s linear infinite' }} /> : <Receipt style={{ width: '11px', height: '11px' }} />} Créer facture
+                                                </button>
+                                              )}
+                                              {hasFacture && <span style={{ fontSize: '12px', color: '#15803d', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}><CheckCircle style={{ width: '12px', height: '12px' }} /> Facture créée</span>}
+                                              <button onClick={() => handleLockDevis(q.id)} disabled={actionLoading === q.id + '-lock'} style={{ padding: '7px 14px', borderRadius: '980px', backgroundColor: '#1db954', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                                {actionLoading === q.id + '-lock' ? <Loader2 style={{ width: '11px', height: '11px', animation: 'spin 1s linear infinite' }} /> : <Lock style={{ width: '11px', height: '11px' }} />} Règlement reçu
+                                              </button>
+                                            </>
+                                          );
+                                        })()}
+                                        {q.status === 'locked' && (
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '10px', backgroundColor: '#e2fbe8', border: '1px solid #bbf7d0' }}>
+                                            <Lock style={{ width: '11px', height: '11px', color: '#1db954' }} />
+                                            <span style={{ fontSize: '12px', fontWeight: 700, color: '#15803d' }}>Règlement confirmé — inventaire verrouillé</span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+
+                            {/* ── FACTURES ── */}
+                            {dt === 'facture' && docs.map((q: any) => (
+                              <div key={q.id} style={{ border: `1px solid ${q.status === 'pdf_pending' ? 'rgba(217,119,6,.3)' : 'rgba(0,0,0,.07)'}`, borderRadius: '14px', overflow: 'hidden' }}>
+                                {q.status === 'pdf_pending' && (
+                                  <div style={{ backgroundColor: '#fef3c7', borderBottom: '1px solid rgba(217,119,6,.2)', padding: '9px 18px', display: 'flex', alignItems: 'center', gap: '7px' }}>
+                                    <Upload style={{ width: '13px', height: '13px', color: '#b45309', flexShrink: 0 }} />
+                                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#92400e' }}>Action requise — Uploadez le PDF de la facture.</span>
+                                  </div>
+                                )}
+                                <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                                    <div>
+                                      <div style={{ fontWeight: 800, fontSize: '13px' }}>Facture #{q.id}</div>
+                                      <div style={{ fontSize: '11px', color: '#86868b', marginTop: '2px' }}>Source : Devis #{q.linkedDevisId}</div>
+                                    </div>
+                                    <span style={{ fontSize: '11px', fontWeight: 700, padding: '3px 10px', borderRadius: '980px', textTransform: 'uppercase' as const, backgroundColor: q.status === 'pdf_pending' ? '#fef3c7' : '#e2fbe8', color: q.status === 'pdf_pending' ? '#b45309' : '#1db954' }}>
+                                      {q.status === 'pdf_pending' ? 'PDF requis' : 'Facture émise'}
+                                    </span>
+                                  </div>
+                                  <div style={{ fontSize: '12px', color: '#6e6e73' }}>
+                                    {new Date(q.startDate).toLocaleDateString('fr-FR')} → {new Date(q.endDate).toLocaleDateString('fr-FR')}
+                                    <span style={{ marginLeft: '12px' }}>HT : <strong>{q.totalHT.toLocaleString('fr-FR')} €</strong></span>
+                                    <span style={{ marginLeft: '8px' }}>TTC : <strong style={{ color: '#15803d' }}>{q.totalTTC.toLocaleString('fr-FR')} €</strong></span>
+                                  </div>
+                                  {paymentSettings && (paymentSettings.iban || paymentSettings.bic) && (
+                                    <div style={{ backgroundColor: '#e8f1fd', border: '1px solid rgba(0,113,227,.15)', borderRadius: '10px', padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#0071e3', letterSpacing: '.04em', textTransform: 'uppercase' as const }}>Coordonnées de paiement envoyées au client</div>
+                                      {paymentSettings.iban && (
+                                        <div style={{ fontSize: '12px', color: '#1d1d1f' }}>
+                                          <span style={{ color: '#86868b', fontWeight: 600 }}>IBAN : </span>
+                                          <span style={{ fontFamily: 'monospace', fontWeight: 700, letterSpacing: '.04em' }}>{paymentSettings.iban}</span>
+                                        </div>
+                                      )}
+                                      {paymentSettings.bic && (
+                                        <div style={{ fontSize: '12px', color: '#1d1d1f' }}>
+                                          <span style={{ color: '#86868b', fontWeight: 600 }}>BIC : </span>
+                                          <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{paymentSettings.bic}</span>
+                                        </div>
+                                      )}
+                                      {paymentSettings.instructions && (
+                                        <div style={{ fontSize: '11px', color: '#6e6e73', marginTop: '2px', lineHeight: 1.5 }}>{paymentSettings.instructions}</div>
+                                      )}
+                                    </div>
+                                  )}
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
+                                    {q.pdfUrl && (
+                                      <a href={`/api/quotes/${q.id}/pdf`} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '6px 12px', borderRadius: '980px', backgroundColor: '#e2fbe8', color: '#1db954', textDecoration: 'none', fontWeight: 700, fontSize: '12px' }}>
+                                        <Download style={{ width: '12px', height: '12px' }} /> PDF
+                                      </a>
+                                    )}
+                                    {q.status === 'pdf_pending' && (
+                                      <>
+                                        <input type="file" accept="application/pdf" onChange={e => setPdfFileMap(prev => ({ ...prev, [q.id]: e.target.files?.[0] ?? null }))} style={{ fontSize: '12px', cursor: 'pointer', maxWidth: '150px' }} />
+                                        <button onClick={() => handleUploadPdf(q.id)} disabled={actionLoading === q.id || !pdfFileMap[q.id]} style={{ padding: '6px 12px', borderRadius: '980px', backgroundColor: pdfFileMap[q.id] ? '#d97706' : '#e5e7eb', color: pdfFileMap[q.id] ? '#fff' : '#9ca3af', border: 'none', cursor: pdfFileMap[q.id] ? 'pointer' : 'default', fontWeight: 700, fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                          {actionLoading === q.id ? <Loader2 style={{ width: '11px', height: '11px', animation: 'spin 1s linear infinite' }} /> : <Upload style={{ width: '11px', height: '11px' }} />} Envoyer
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+
+                            {/* ── AVOIRS & CONTRATS ── */}
+                            {(dt === 'avoir' || dt === 'contrat') && docs.map((q: any) => (
+                              <div key={q.id} style={{ border: '1px solid rgba(0,0,0,.07)', borderRadius: '14px', padding: '14px 18px', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
+                                <div>
+                                  <div style={{ fontWeight: 700, fontSize: '13px' }}>#{q.id}</div>
+                                  <div style={{ fontSize: '11px', color: '#86868b', marginTop: '2px' }}>
+                                    {new Date(q.startDate).toLocaleDateString('fr-FR')} → {new Date(q.endDate).toLocaleDateString('fr-FR')}
+                                  </div>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <span style={{ fontSize: '13px', fontWeight: 700, color: '#86868b' }}>{q.totalHT.toLocaleString('fr-FR')} € HT</span>
+                                  <span style={{ fontSize: '11px', fontWeight: 700, padding: '3px 10px', borderRadius: '980px', backgroundColor: '#f5f5f7', color: '#6e6e73' }}>{dt === 'avoir' ? 'Avoir' : 'Contrat'}</span>
+                                  {q.pdfUrl && (
+                                    <a href={`/api/quotes/${q.id}/pdf`} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '5px 10px', borderRadius: '8px', backgroundColor: '#e2fbe8', color: '#1db954', textDecoration: 'none', fontWeight: 700, fontSize: '11px' }}>
+                                      <Download style={{ width: '11px', height: '11px' }} /> PDF
+                                    </a>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
               </div>
-            ) : (
-              <div style={{ backgroundColor: '#ffffff', border: '1px solid rgba(0,0,0,.08)', borderRadius: '24px', padding: '20px', boxShadow: '0 4px 20px rgba(0,0,0,.02)', overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '600px', fontSize: '13px' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid rgba(0,0,0,.06)', backgroundColor: '#f5f5f7', fontWeight: 700, color: '#86868b', textTransform: 'uppercase', letterSpacing: '.06em' }}>
-                      <th style={{ padding: '14px 20px' }}>ID Devis</th>
-                      <th style={{ padding: '14px 20px' }}>Période de location</th>
-                      <th style={{ padding: '14px 20px' }}>Total Estimé (HT)</th>
-                      <th style={{ padding: '14px 20px' }}>Statut du Dossier</th>
-                      <th style={{ padding: '14px 20px', textAlign: 'center' }}>Date d'Annulation</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {clientAvoirs.map((q) => (
-                      <tr key={q.id} style={{ borderBottom: '1px solid rgba(0,0,0,.04)' }}>
-                        <td style={{ padding: '16px 20px', fontWeight: 800, color: '#86868b' }}>#{q.id}</td>
-                        <td style={{ padding: '16px 20px', color: '#6e6e73' }}>
-                          du {new Date(q.startDate).toLocaleDateString('fr-FR')} au {new Date(q.endDate).toLocaleDateString('fr-FR')}
-                        </td>
-                        <td style={{ padding: '16px 20px', color: '#86868b', fontWeight: 600 }}>
-                          {q.totalHT.toLocaleString('fr-FR')} €
-                        </td>
-                        <td style={{ padding: '16px 20px' }}>
-                          <span style={{ display: 'inline-flex', padding: '4px 10px', borderRadius: '980px', fontSize: '11px', fontWeight: 700, backgroundColor: '#fef2f2', color: '#ef4444' }}>
-                            Refusé / Annulé
-                          </span>
-                        </td>
-                        <td style={{ padding: '16px 20px', textAlign: 'center', color: '#86868b' }}>
-                          {new Date(q.updatedAt).toLocaleDateString('fr-FR')}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+            );
+          })
         )}
 
       </main>

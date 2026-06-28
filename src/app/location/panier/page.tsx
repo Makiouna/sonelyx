@@ -57,6 +57,10 @@ export default function CartPage() {
   const [submitLoading, setSubmitLoading] = useState(false);
   const [submitError, setSubmitError] = useState('');
 
+  // Availability check
+  const [availability, setAvailability] = useState<Record<string, number> | null>(null);
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+
   // 1. Fetch catalog data & settings
   useEffect(() => {
     async function loadCatalogAndSettings() {
@@ -176,6 +180,28 @@ export default function CartPage() {
   // Multiply pricing by coefficient
   const finalTotalHT = totalHT * durationCoeff;
   const finalTotalTTC = totalTTC * durationCoeff;
+
+  // Fetch availability when dates change
+  useEffect(() => {
+    if (!startDate || !endDate) { setAvailability(null); return; }
+    if (new Date(endDate) < new Date(startDate)) return;
+    setAvailabilityLoading(true);
+    fetch(`/api/availability?startDate=${startDate}&endDate=${endDate}`)
+      .then(r => r.json())
+      .then(data => { if (data.success) setAvailability(data.available); })
+      .catch(() => {})
+      .finally(() => setAvailabilityLoading(false));
+  }, [startDate, endDate]);
+
+  // Items that exceed available stock for the chosen period
+  const overBookedItems = availability
+    ? cartItems.filter(item => (availability[item.id] ?? item.quantity) < item.requestedQty)
+    : [];
+
+  // Alternative items per unavailable item (same category, has stock)
+  const alternatives = overBookedItems.flatMap(item =>
+    equipmentList.filter(eq => eq.cat === item.cat && eq.id !== item.id && (availability?.[eq.id] ?? eq.quantity) > 0)
+  );
 
   // Navigation handlers
   const handleGoToStep2 = () => {
@@ -445,6 +471,49 @@ export default function CartPage() {
                         style={{ padding: '14px 18px', borderRadius: '16px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '14px', fontFamily: 'inherit', resize: 'vertical' }}
                       />
                     </div>
+
+                    {/* Availability warnings */}
+                    {availabilityLoading && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#86868b' }}>
+                        <Loader2 style={{ width: '14px', height: '14px', animation: 'spin 1s linear infinite' }} /> Vérification des disponibilités...
+                      </div>
+                    )}
+                    {!availabilityLoading && overBookedItems.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                        <div style={{ backgroundColor: '#fef3c7', border: '1px solid rgba(245,158,11,.3)', borderRadius: '14px', padding: '14px 18px' }}>
+                          <div style={{ fontWeight: 700, fontSize: '13px', color: '#92400e', marginBottom: '8px' }}>
+                            Certains équipements ont une disponibilité limitée sur cette période :
+                          </div>
+                          {overBookedItems.map(item => (
+                            <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#b45309', marginBottom: '4px' }}>
+                              <span>{item.name}</span>
+                              <span style={{ fontWeight: 700 }}>
+                                {availability![item.id] ?? 0} disponible{(availability![item.id] ?? 0) > 1 ? 's' : ''} (demandé : {item.requestedQty})
+                              </span>
+                            </div>
+                          ))}
+                          <p style={{ margin: '8px 0 0', fontSize: '12px', color: '#92400e', lineHeight: 1.4 }}>
+                            Vous pouvez tout de même soumettre votre demande — l'administrateur vous contactera pour ajuster les quantités.
+                          </p>
+                        </div>
+                        {alternatives.length > 0 && (
+                          <div style={{ backgroundColor: '#e8f1fd', border: '1px solid rgba(0,113,227,.2)', borderRadius: '14px', padding: '14px 18px' }}>
+                            <div style={{ fontWeight: 700, fontSize: '13px', color: '#0071e3', marginBottom: '8px' }}>
+                              Alternatives disponibles dans les mêmes catégories :
+                            </div>
+                            {alternatives.map(alt => (
+                              <div key={alt.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', color: '#1d1d1f', marginBottom: '4px' }}>
+                                <span style={{ fontWeight: 600 }}>{alt.brand} {alt.name}</span>
+                                <span style={{ color: '#0071e3', fontWeight: 700 }}>
+                                  {availability![alt.id] ?? alt.quantity} dispo{(availability![alt.id] ?? alt.quantity) > 1 ? 's' : ''}
+                                  {alt.priceType === 'numeric' ? ` · ${alt.price} € HT/j` : ' · Sur devis'}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

@@ -79,7 +79,7 @@ export async function PUT(
     const updates: any = { updatedAt: new Date() };
 
     if (status !== undefined) {
-      if (!['draft', 'pending', 'modified_by_admin', 'pdf_pending', 'validated', 'cancelled'].includes(status)) {
+      if (!['draft', 'pending', 'modified_by_admin', 'pdf_pending', 'validated', 'cancelled', 'locked'].includes(status)) {
         return NextResponse.json({ success: false, error: 'Statut invalide.' }, { status: 400 });
       }
 

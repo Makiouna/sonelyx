@@ -22,6 +22,8 @@ export async function GET() {
         id: quoteTable.id,
         userId: quoteTable.userId,
         status: quoteTable.status,
+        docType: quoteTable.docType,
+        linkedDevisId: quoteTable.linkedDevisId,
         startDate: quoteTable.startDate,
         endDate: quoteTable.endDate,
         notes: quoteTable.notes,

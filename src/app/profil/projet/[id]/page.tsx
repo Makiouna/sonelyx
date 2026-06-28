@@ -37,6 +37,7 @@ export default function ProjectPage({ params }: PageProps) {
 
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [quotesLoading, setQuotesLoading] = useState(true);
+  const [paymentSettings, setPaymentSettings] = useState<{ iban: string; bic: string; instructions: string } | null>(null);
   const [quoteActionLoading, setQuoteActionLoading] = useState<string | null>(null);
   const [refusingQuoteId, setRefusingQuoteId] = useState<string | null>(null);
   const [refusalNote, setRefusalNote] = useState('');
@@ -62,6 +63,14 @@ export default function ProjectPage({ params }: PageProps) {
   }
 
   useEffect(() => { if (session) fetchQuotes(); }, [session]);
+
+  useEffect(() => {
+    fetch('/api/settings').then(r => r.json()).then(data => {
+      if (data.success && (data.iban || data.bic || data.paymentInstructions)) {
+        setPaymentSettings({ iban: data.iban || '', bic: data.bic || '', instructions: data.paymentInstructions || '' });
+      }
+    }).catch(() => {});
+  }, []);
 
   const handleSendDraft = async (id: string) => {
     setQuoteActionLoading(id);
@@ -530,7 +539,31 @@ export default function ProjectPage({ params }: PageProps) {
                 <h2 style={{ margin: 0, fontSize: 16, fontWeight: 800, letterSpacing: '-.01em' }}>{meta.labelPlural}</h2>
                 <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: '980px', backgroundColor: '#e8e8ed', color: '#6e6e73' }}>{docs.length}</span>
               </div>
-              {dt === 'devis' ? <DevisSection docs={docs} /> : <SimpleDocSection docs={docs} />}
+              {dt === 'devis' ? <DevisSection docs={docs} /> : (
+                <>
+                  {dt === 'facture' && paymentSettings && (paymentSettings.iban || paymentSettings.bic) && (
+                    <div style={{ backgroundColor: '#e8f1fd', border: '1px solid rgba(0,113,227,.15)', borderRadius: 14, padding: '14px 18px', marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#0071e3', letterSpacing: '.04em', textTransform: 'uppercase' }}>Coordonnées de paiement</div>
+                      {paymentSettings.iban && (
+                        <div style={{ fontSize: 13, color: '#1d1d1f' }}>
+                          <span style={{ color: '#86868b', fontWeight: 600 }}>IBAN : </span>
+                          <span style={{ fontFamily: 'monospace', fontWeight: 700, letterSpacing: '.05em' }}>{paymentSettings.iban}</span>
+                        </div>
+                      )}
+                      {paymentSettings.bic && (
+                        <div style={{ fontSize: 13, color: '#1d1d1f' }}>
+                          <span style={{ color: '#86868b', fontWeight: 600 }}>BIC : </span>
+                          <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{paymentSettings.bic}</span>
+                        </div>
+                      )}
+                      {paymentSettings.instructions && (
+                        <div style={{ fontSize: 12, color: '#6e6e73', marginTop: 4, lineHeight: 1.5 }}>{paymentSettings.instructions}</div>
+                      )}
+                    </div>
+                  )}
+                  <SimpleDocSection docs={docs} />
+                </>
+              )}
             </section>
           );
         })}
