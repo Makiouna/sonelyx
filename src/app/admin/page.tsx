@@ -8,7 +8,7 @@ import Header from '@/components/header';
 import Footer from '@/components/footer';
 import ScannerModal from '@/components/scanner-modal';
 import { useRemoteScanner } from '@/lib/remote-scanner-context';
-import { Loader2, Plus, Edit2, Trash2, Users, Sliders, DollarSign, TrendingUp, BarChart3, Info, ChevronLeft, Tag, FileText, CreditCard, Camera, QrCode } from 'lucide-react';
+import { Loader2, Plus, Edit2, Trash2, Users, Sliders, DollarSign, TrendingUp, BarChart3, Info, ChevronLeft, Tag, FileText, CreditCard, Camera, QrCode, X } from 'lucide-react';
 
 interface EquipmentItem {
   id: string;
@@ -81,7 +81,20 @@ export default function AdminDashboard() {
   const [brand, setBrand] = useState('');
   const [cat, setCat] = useState('');
   const [desc, setDesc] = useState('');
-  const [specsInput, setSpecsInput] = useState('');
+  const [specs, setSpecs] = useState<string[]>([]);
+  const [newSpecText, setNewSpecText] = useState('');
+
+  const handleAddSpec = () => {
+    const trimmed = newSpecText.trim();
+    if (trimmed) {
+      setSpecs(prev => [...prev, trimmed]);
+      setNewSpecText('');
+    }
+  };
+
+  const handleRemoveSpec = (index: number) => {
+    setSpecs(prev => prev.filter((_, i) => i !== index));
+  };
   const [priceType, setPriceType] = useState<'numeric' | 'on_request'>('numeric');
   const [priceTax, setPriceTax] = useState<'HT' | 'TTC'>('HT');
   const [price, setPrice] = useState('');
@@ -558,7 +571,8 @@ export default function AdminDashboard() {
     setBrand('');
     setCat(categories.length > 0 ? categories[0].id : '');
     setDesc('');
-    setSpecsInput('');
+    setSpecs([]);
+    setNewSpecText('');
     setPriceType('numeric');
     setPriceTax('HT');
     setPrice('');
@@ -575,7 +589,8 @@ export default function AdminDashboard() {
     setBrand(item.brand);
     setCat(item.cat);
     setDesc(item.desc);
-    setSpecsInput((item.specs || []).join(', '));
+    setSpecs(item.specs || []);
+    setNewSpecText('');
     setPriceType(item.priceType || 'numeric');
     setPriceTax(item.priceTax || 'HT');
     setPrice(String(item.price));
@@ -729,7 +744,6 @@ export default function AdminDashboard() {
 
     setFormLoading(true);
     try {
-      const specsArray = specsInput.split(',').map(s => s.trim()).filter(Boolean);
       const res = await fetch('/api/equipment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -738,7 +752,7 @@ export default function AdminDashboard() {
           brand,
           cat,
           desc,
-          specs: specsArray,
+          specs: specs,
           priceType,
           priceTax,
           price: priceType === 'numeric' ? Number(price) : 0,
@@ -773,7 +787,6 @@ export default function AdminDashboard() {
 
     setFormLoading(true);
     try {
-      const specsArray = specsInput.split(',').map(s => s.trim()).filter(Boolean);
       const res = await fetch(`/api/equipment/${editingItem.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -782,7 +795,7 @@ export default function AdminDashboard() {
           brand,
           cat,
           desc,
-          specs: specsArray,
+          specs: specs,
           priceType,
           priceTax,
           price: priceType === 'numeric' ? Number(price) : 0,
@@ -933,7 +946,8 @@ export default function AdminDashboard() {
             
             {/* Header and Add Button */}
             <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '20px' }}>
-              <div style={{ display: 'flex', gap: '8px', backgroundColor: '#e8e8ed', padding: '4px', borderRadius: '980px' }}>
+              <div style={{ overflowX: 'auto', scrollbarWidth: 'none', maxWidth: '100%' }}>
+              <div style={{ display: 'flex', gap: '6px', backgroundColor: '#e8e8ed', padding: '4px', borderRadius: '980px', width: 'max-content' }}>
                 <button
                   onClick={() => setActiveTab('catalogue')}
                   style={{
@@ -1032,6 +1046,7 @@ export default function AdminDashboard() {
                     </span>
                   )}
                 </button>
+              </div>
               </div>
 
               {activeTab === 'catalogue' && (
@@ -1862,9 +1877,90 @@ export default function AdminDashboard() {
                   <textarea rows={4} placeholder="Présentation rapide et caractéristiques générales du matériel..." value={desc} onChange={e => setDesc(e.target.value)} style={{ padding: '16px', borderRadius: '18px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '14px', fontFamily: 'inherit', resize: 'vertical' }} required />
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: 600 }}>Spécifications (séparées par une virgule)</label>
-                  <input type="text" placeholder="ex: Actif 2 voies, SPL max 142dB, Guide d'onde DOSC" value={specsInput} onChange={e => setSpecsInput(e.target.value)} style={{ padding: '12px 18px', borderRadius: '980px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '14px' }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <label style={{ fontSize: '13px', fontWeight: 600 }}>Caractéristiques techniques (Spécifications)</label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input
+                      type="text"
+                      placeholder="Ajouter une caractéristique (ex: SPL max 142dB, 3 réglages de base...)"
+                      value={newSpecText}
+                      onChange={e => setNewSpecText(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddSpec();
+                        }
+                      }}
+                      style={{
+                        flex: 1,
+                        padding: '12px 18px',
+                        borderRadius: '980px',
+                        border: '1px solid rgba(0,0,0,.12)',
+                        outline: 'none',
+                        fontSize: '14px'
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddSpec}
+                      style={{
+                        padding: '12px 20px',
+                        borderRadius: '980px',
+                        backgroundColor: '#1d1d1f',
+                        color: '#ffffff',
+                        border: 'none',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        transition: 'all 0.2s'
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.backgroundColor = '#0071e3'}
+                      onMouseLeave={e => e.currentTarget.style.backgroundColor = '#1d1d1f'}
+                    >
+                      Ajouter
+                    </button>
+                  </div>
+                  {specs.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '6px', padding: '12px', backgroundColor: 'rgba(0,0,0,0.02)', borderRadius: '16px', border: '1px solid rgba(0,0,0,0.04)' }}>
+                      {specs.map((spec, index) => (
+                        <span
+                          key={index}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '6px 12px',
+                            borderRadius: '8px',
+                            backgroundColor: '#ffffff',
+                            border: '1px solid rgba(0,0,0,0.08)',
+                            fontSize: '13px',
+                            fontWeight: 600,
+                            color: '#1d1d1f'
+                          }}
+                        >
+                          {spec}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSpec(index)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              border: 'none',
+                              background: 'none',
+                              padding: 0,
+                              cursor: 'pointer',
+                              color: '#86868b'
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
+                            onMouseLeave={e => e.currentTarget.style.color = '#86868b'}
+                          >
+                            <X style={{ width: '14px', height: '14px' }} />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -1934,7 +2030,7 @@ export default function AdminDashboard() {
                   </div>
                   {image && (
                     <div style={{ marginTop: '10px', position: 'relative', width: '120px', height: '90px', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(0,0,0,.08)' }}>
-                      <img src={image} alt="Aperçu" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <img src={image} alt="Aperçu" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                     </div>
                   )}
                 </div>
@@ -2189,9 +2285,90 @@ export default function AdminDashboard() {
                   <textarea rows={4} placeholder="Présentation rapide et caractéristiques générales du matériel..." value={desc} onChange={e => setDesc(e.target.value)} style={{ padding: '16px', borderRadius: '18px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '14px', fontFamily: 'inherit', resize: 'vertical' }} required />
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: '13px', fontWeight: 600 }}>Spécifications (séparées par une virgule)</label>
-                  <input type="text" placeholder="ex: Actif 2 voies, SPL max 142dB, Guide d'onde DOSC" value={specsInput} onChange={e => setSpecsInput(e.target.value)} style={{ padding: '12px 18px', borderRadius: '980px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '14px' }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <label style={{ fontSize: '13px', fontWeight: 600 }}>Caractéristiques techniques (Spécifications)</label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input
+                      type="text"
+                      placeholder="Ajouter une caractéristique (ex: SPL max 142dB, 3 réglages de base...)"
+                      value={newSpecText}
+                      onChange={e => setNewSpecText(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddSpec();
+                        }
+                      }}
+                      style={{
+                        flex: 1,
+                        padding: '12px 18px',
+                        borderRadius: '980px',
+                        border: '1px solid rgba(0,0,0,.12)',
+                        outline: 'none',
+                        fontSize: '14px'
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddSpec}
+                      style={{
+                        padding: '12px 20px',
+                        borderRadius: '980px',
+                        backgroundColor: '#1d1d1f',
+                        color: '#ffffff',
+                        border: 'none',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        transition: 'all 0.2s'
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.backgroundColor = '#0071e3'}
+                      onMouseLeave={e => e.currentTarget.style.backgroundColor = '#1d1d1f'}
+                    >
+                      Ajouter
+                    </button>
+                  </div>
+                  {specs.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '6px', padding: '12px', backgroundColor: 'rgba(0,0,0,0.02)', borderRadius: '16px', border: '1px solid rgba(0,0,0,0.04)' }}>
+                      {specs.map((spec, index) => (
+                        <span
+                          key={index}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '6px 12px',
+                            borderRadius: '8px',
+                            backgroundColor: '#ffffff',
+                            border: '1px solid rgba(0,0,0,0.08)',
+                            fontSize: '13px',
+                            fontWeight: 600,
+                            color: '#1d1d1f'
+                          }}
+                        >
+                          {spec}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSpec(index)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              border: 'none',
+                              background: 'none',
+                              padding: 0,
+                              cursor: 'pointer',
+                              color: '#86868b'
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
+                            onMouseLeave={e => e.currentTarget.style.color = '#86868b'}
+                          >
+                            <X style={{ width: '14px', height: '14px' }} />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -2261,7 +2438,7 @@ export default function AdminDashboard() {
                   </div>
                   {image && (
                     <div style={{ marginTop: '10px', position: 'relative', width: '120px', height: '90px', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(0,0,0,.08)' }}>
-                      <img src={image} alt="Aperçu" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <img src={image} alt="Aperçu" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                     </div>
                   )}
                 </div>

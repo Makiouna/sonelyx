@@ -928,8 +928,8 @@ export default function ClientFolderPage({ params }: PageProps) {
                                       </div>
                                     </div>
                                     <textarea rows={2} value={editNotes} onChange={e => setEditNotes(e.target.value)} placeholder="Notes..." style={{ padding: '10px 14px', borderRadius: '12px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '13px', fontFamily: 'inherit', resize: 'vertical' }} />
-                                    <div style={{ border: '1px solid rgba(0,0,0,.08)', borderRadius: '10px', overflow: 'hidden' }}>
-                                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
+                                    <div style={{ border: '1px solid rgba(0,0,0,.08)', borderRadius: '10px', overflowX: 'auto' }}>
+                                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left', minWidth: 380 }}>
                                         <thead>
                                           <tr style={{ backgroundColor: '#f5f5f7', borderBottom: '1px solid rgba(0,0,0,.06)', fontWeight: 600 }}>
                                             <th style={{ padding: '8px 14px' }}>Matériel</th>
@@ -1026,8 +1026,8 @@ export default function ClientFolderPage({ params }: PageProps) {
                                       {q.discount > 0 && <span style={{ color: '#15803d', fontWeight: 700, marginLeft: 'auto' }}>Remise {q.discount}%</span>}
                                     </div>
                                     {q.notes && <div style={{ fontSize: '12px', color: '#6e6e73', fontStyle: 'italic', borderLeft: '3px solid #0071e3', paddingLeft: '8px' }}>"{q.notes}"</div>}
-                                    <div style={{ border: '1px solid rgba(0,0,0,.05)', borderRadius: '8px', overflow: 'hidden', fontSize: '12px' }}>
-                                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                                    <div style={{ border: '1px solid rgba(0,0,0,.05)', borderRadius: '8px', overflowX: 'auto', fontSize: '12px' }}>
+                                      <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: 300 }}>
                                         <thead>
                                           <tr style={{ backgroundColor: '#f5f5f7', borderBottom: '1px solid rgba(0,0,0,.06)', fontWeight: 600 }}>
                                             <th style={{ padding: '7px 12px' }}>Matériel</th>

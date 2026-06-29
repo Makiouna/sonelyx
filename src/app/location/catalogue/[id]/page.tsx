@@ -58,6 +58,7 @@ export default function ProductDetail({ params }: { params: Promise<{ id: string
   const persist = (next: Record<string, boolean>) => {
     try {
       localStorage.setItem('sonelyx_devis', JSON.stringify(next));
+      window.dispatchEvent(new Event('cart-updated'));
     } catch (e) {
       console.error(e);
     }
@@ -132,7 +133,7 @@ export default function ProductDetail({ params }: { params: Promise<{ id: string
           {/* Left Column: Visual */}
           <div style={{ position: 'relative', borderRadius: '24px', overflow: 'hidden', aspectRatio: '4/3', backgroundColor: '#f5f5f7', border: '1px solid rgba(0,0,0,.08)' }}>
             {item.image ? (
-              <img src={item.image} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <img src={item.image} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
             ) : (
               <>
                 <div style={{ position: 'absolute', inset: 0, backgroundImage: 'repeating-linear-gradient(135deg, rgba(0,0,0,.025) 0 1px, transparent 1px 16px)' }}></div>
@@ -212,7 +213,7 @@ export default function ProductDetail({ params }: { params: Promise<{ id: string
                     <Link href={`/location/catalogue/${p.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
                       <div style={{ position: 'relative', aspectRatio: '4/3', backgroundColor: '#f5f5f7', overflow: 'hidden' }}>
                         {p.image ? (
-                          <img src={p.image} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          <img src={p.image} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                         ) : (
                           <div style={{ position: 'absolute', inset: 0, backgroundImage: 'repeating-linear-gradient(135deg, rgba(0,0,0,.028) 0 1px, transparent 1px 16px)' }}></div>
                         )}

@@ -48,7 +48,7 @@ export default function SignIn() {
       </div>
 
       {/* Login Card */}
-      <div style={{ width: '100%', maxWidth: '420px', backgroundColor: '#ffffff', border: '1px solid rgba(0,0,0,.08)', borderRadius: '24px', boxShadow: '0 20px 40px -15px rgba(0,0,0,.06)', padding: '40px 32px' }}>
+      <div className="auth-card" style={{ width: '100%', maxWidth: '420px', backgroundColor: '#ffffff', border: '1px solid rgba(0,0,0,.08)', borderRadius: '24px', boxShadow: '0 20px 40px -15px rgba(0,0,0,.06)', padding: '40px 32px' }}>
         
         {/* Card Header */}
         <div style={{ textAlign: 'center', marginBottom: '32px' }}>
@@ -170,6 +170,11 @@ export default function SignIn() {
 
       </div>
 
+      <style>{`
+        @media (max-width: 480px) {
+          .auth-card { padding: 28px 20px !important; border-radius: 20px !important; }
+        }
+      `}</style>
     </div>
   );
 }

@@ -114,6 +114,7 @@ export default function CartPage() {
     setCart(nextCart);
     try {
       localStorage.setItem('sonelyx_devis', JSON.stringify(nextCart));
+      window.dispatchEvent(new Event('cart-updated'));
     } catch (e) {
       console.error(e);
     }
@@ -283,6 +284,7 @@ export default function CartPage() {
       if (data.success) {
         // Clear cart selections
         localStorage.removeItem('sonelyx_devis');
+        window.dispatchEvent(new Event('cart-updated'));
         // Redirect to profile page to see submitted quote
         router.push('/profil');
         router.refresh();
@@ -309,18 +311,18 @@ export default function CartPage() {
       <main style={{ flex: 1, maxWidth: '1180px', margin: '0 auto', width: '100%', padding: '40px clamp(20px, 4vw, 40px)' }}>
         
         {/* Step Indicator Header */}
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', marginBottom: '40px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: step >= 1 ? '#0071e3' : '#86868b', fontWeight: step === 1 ? 800 : 600 }}>
+        <div className="step-indicator" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', marginBottom: '40px', flexWrap: 'wrap', rowGap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: step >= 1 ? '#0071e3' : '#86868b', fontWeight: step === 1 ? 800 : 600, whiteSpace: 'nowrap' }}>
             <span style={{ display: 'inline-flex', width: '24px', height: '24px', borderRadius: '50%', backgroundColor: step >= 1 ? '#0071e3' : 'transparent', color: step >= 1 ? '#fff' : '#86868b', border: step >= 1 ? 'none' : '1px solid #86868b', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 800 }}>1</span>
             <span>Panier</span>
           </div>
-          <div style={{ width: '40px', height: '1px', backgroundColor: 'rgba(0,0,0,.12)' }}></div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: step >= 2 ? '#0071e3' : '#86868b', fontWeight: step === 2 ? 800 : 600 }}>
+          <div style={{ width: '32px', height: '1px', backgroundColor: 'rgba(0,0,0,.12)', flexShrink: 0 }}></div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: step >= 2 ? '#0071e3' : '#86868b', fontWeight: step === 2 ? 800 : 600, whiteSpace: 'nowrap' }}>
             <span style={{ display: 'inline-flex', width: '24px', height: '24px', borderRadius: '50%', backgroundColor: step >= 2 ? '#0071e3' : 'transparent', color: step >= 2 ? '#fff' : '#86868b', border: step >= 2 ? 'none' : '1px solid #86868b', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 800 }}>2</span>
             <span>Période &amp; Notes</span>
           </div>
-          <div style={{ width: '40px', height: '1px', backgroundColor: 'rgba(0,0,0,.12)' }}></div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: step >= 3 ? '#0071e3' : '#86868b', fontWeight: step === 3 ? 800 : 600 }}>
+          <div style={{ width: '32px', height: '1px', backgroundColor: 'rgba(0,0,0,.12)', flexShrink: 0 }}></div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: step >= 3 ? '#0071e3' : '#86868b', fontWeight: step === 3 ? 800 : 600, whiteSpace: 'nowrap' }}>
             <span style={{ display: 'inline-flex', width: '24px', height: '24px', borderRadius: '50%', backgroundColor: step >= 3 ? '#0071e3' : 'transparent', color: step >= 3 ? '#fff' : '#86868b', border: step >= 3 ? 'none' : '1px solid #86868b', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 800 }}>3</span>
             <span>Validation</span>
           </div>
@@ -363,7 +365,7 @@ export default function CartPage() {
                           <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flex: '1 1 240px' }}>
                             <div style={{ position: 'relative', width: '64px', height: '64px', borderRadius: '12px', overflow: 'hidden', backgroundColor: '#f5f5f7', border: '1px solid rgba(0,0,0,.06)', flexShrink: 0 }}>
                               {item.image ? (
-                                <img src={item.image} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                <img src={item.image} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                               ) : (
                                 <div style={{ position: 'absolute', inset: 0, backgroundImage: 'repeating-linear-gradient(135deg, rgba(0,0,0,.025) 0 1px, transparent 1px 8px)' }}></div>
                               )}
@@ -781,7 +783,7 @@ export default function CartPage() {
             </div>
 
             {/* RIGHT COLUMN: PRICING CARD */}
-            <div style={{ backgroundColor: '#ffffff', border: '1px solid rgba(0,0,0,.08)', borderRadius: '24px', padding: '30px', boxShadow: '0 4px 20px rgba(0,0,0,.02)', position: 'sticky', top: '100px' }}>
+            <div style={{ backgroundColor: '#ffffff', border: '1px solid rgba(0,0,0,.08)', borderRadius: '24px', padding: '30px', boxShadow: '0 4px 20px rgba(0,0,0,.02)', position: 'sticky', top: '76px', alignSelf: 'start' }}>
               <h3 style={{ fontSize: '18px', fontWeight: 800, margin: '0 0 20px', borderBottom: '1px solid rgba(0,0,0,.06)', paddingBottom: '12px' }}>Détails de la Facture</h3>
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>

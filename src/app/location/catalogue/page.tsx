@@ -92,6 +92,7 @@ export default function LocationCatalogue() {
   const persist = (next: Record<string, boolean>) => {
     try {
       localStorage.setItem('sonelyx_devis', JSON.stringify(next));
+      window.dispatchEvent(new Event('cart-updated'));
     } catch (e) {
       console.error(e);
     }
@@ -271,7 +272,7 @@ export default function LocationCatalogue() {
                       <Link href={`/location/catalogue/${item.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
                         <div style={{ position: 'relative', aspectRatio: '4/3', backgroundColor: '#f5f5f7', overflow: 'hidden' }}>
                           {item.image ? (
-                            <img src={item.image} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            <img src={item.image} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                           ) : (
                             <div style={{ position: 'absolute', inset: 0, backgroundImage: 'repeating-linear-gradient(135deg, rgba(0,0,0,.02) 0 1px, transparent 1px 16px)' }}></div>
                           )}
@@ -294,22 +295,11 @@ export default function LocationCatalogue() {
                             <h3 style={{ fontWeight: 800, fontSize: '20px', letterSpacing: '-.02em', margin: '0 0 6px', color: '#1d1d1f' }}>
                               {item.name}
                             </h3>
-                            <p style={{ fontSize: '14px', lineHeight: 1.5, color: '#6e6e73', margin: 0 }}>
+                            <p style={{ fontSize: '14px', lineHeight: 1.5, color: '#6e6e73', margin: 0, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                               {item.desc}
                             </p>
                           </div>
                         </Link>
-
-                        {/* Specs badges preview */}
-                        {item.specs && item.specs.length > 0 && (
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                            {item.specs.slice(0, 3).map((spec, sidx) => (
-                              <span key={sidx} style={{ padding: '5px 10px', borderRadius: '8px', backgroundColor: '#f5f5f7', fontSize: '11px', fontWeight: 600, color: '#424245' }}>
-                                {spec}
-                              </span>
-                            ))}
-                          </div>
-                        )}
 
                         {/* Price tag & add button */}
                         <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', paddingTop: '12px', borderTop: '1px solid rgba(0,0,0,.06)' }}>

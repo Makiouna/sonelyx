@@ -179,7 +179,8 @@ export default function ProjectPage({ params }: PageProps) {
   // ── Shared detail panel ───────────────────────────────────────────────────
   const DetailPanel = ({ q }: { q: Quote }) => (
     <div style={{ borderTop: '1px solid rgba(0,0,0,.06)', padding: '14px 16px', backgroundColor: '#fafafa', display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' as any }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, minWidth: 280 }}>
         <thead>
           <tr>
             <th style={{ textAlign: 'left', color: '#86868b', fontWeight: 600, paddingBottom: 6, borderBottom: '1px solid rgba(0,0,0,.06)' }}>Article</th>
@@ -202,6 +203,7 @@ export default function ProjectPage({ params }: PageProps) {
           ))}
         </tbody>
       </table>
+      </div>
       {q.notes && <div style={{ fontSize: 12, color: '#6e6e73', fontStyle: 'italic', borderLeft: '2px solid #e8e8ed', paddingLeft: 8 }}>{q.notes}</div>}
       {q.discount > 0 && (
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
@@ -463,7 +465,7 @@ export default function ProjectPage({ params }: PageProps) {
     <div style={{ backgroundColor: '#f5f5f7', color: '#1d1d1f', fontFamily: 'var(--font-hanken-grotesk), sans-serif', WebkitFontSmoothing: 'antialiased', letterSpacing: '-.01em', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <Header subTitle="Mon Projet" links={profileLinks} />
 
-      <main style={{ flex: 1, maxWidth: 1000, margin: '0 auto', width: '100%', padding: '40px clamp(20px, 4vw, 40px)', display: 'flex', flexDirection: 'column', gap: 28 }}>
+      <main style={{ flex: 1, maxWidth: '1000px', margin: '0 auto', width: '100%', padding: '40px clamp(20px, 4vw, 40px)', display: 'flex', flexDirection: 'column', gap: 28 }}>
 
         {/* Back */}
         <Link href="/profil" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, textDecoration: 'none', color: '#86868b', fontSize: 14, fontWeight: 600, alignSelf: 'flex-start' }}>
@@ -485,7 +487,7 @@ export default function ProjectPage({ params }: PageProps) {
                     onChange={e => setRenameValue(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') handleRename(); if (e.key === 'Escape') setIsRenaming(false); }}
                     placeholder={project.name}
-                    style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-.02em', border: '1.5px solid #0071e3', borderRadius: 10, padding: '4px 10px', outline: 'none', fontFamily: 'var(--font-hanken-grotesk), sans-serif', width: 240, color: '#1d1d1f' }}
+                    style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-.02em', border: '1.5px solid #0071e3', borderRadius: 10, padding: '4px 10px', outline: 'none', fontFamily: 'var(--font-hanken-grotesk), sans-serif', width: '100%', maxWidth: 240, minWidth: 120, color: '#1d1d1f' }}
                   />
                   <button onClick={handleRename} disabled={renameLoading}
                     style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 12px', borderRadius: '980px', backgroundColor: '#0071e3', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12, fontFamily: 'inherit' }}>

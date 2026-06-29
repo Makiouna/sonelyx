@@ -48,6 +48,7 @@ export default function Home() {
   const persist = (next: Record<string, boolean>) => {
     try {
       localStorage.setItem('sonelyx_devis', JSON.stringify(next));
+      window.dispatchEvent(new Event('cart-updated'));
     } catch (e) {
       console.error(e);
     }
@@ -326,7 +327,7 @@ export default function Home() {
                   <div key={e.id} style={{ display: 'flex', flexDirection: 'column', backgroundColor: '#fff', borderRadius: '22px', overflow: 'hidden', border: '1px solid rgba(0,0,0,.09)', transition: 'transform .4s cubic-bezier(.22,1,.36,1), box-shadow .4s, border-color .4s' }}>
                     <div style={{ position: 'relative', aspectRatio: '4/3', backgroundColor: '#f5f5f7', overflow: 'hidden' }}>
                       {e.image ? (
-                        <img src={e.image} alt={e.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <img src={e.image} alt={e.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                       ) : (
                         <>
                           <div style={{ position: 'absolute', inset: 0, backgroundImage: 'repeating-linear-gradient(135deg, rgba(0,0,0,.028) 0 1px, transparent 1px 16px)' }}></div>
