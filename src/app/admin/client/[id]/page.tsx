@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { groupQuotesByProject, getProjectStatus, projectStatusLabel, projectStatusColors } from '@/lib/project-grouping';
 import ScannerModal from '@/components/scanner-modal';
+import { useRemoteScanner } from '@/lib/remote-scanner-context';
 
 interface EquipmentItem {
   id: string;
@@ -92,6 +93,7 @@ export default function ClientFolderPage({ params }: PageProps) {
   const { id: clientId } = use(params);
   const { data: session, isPending } = authClient.useSession();
   const router = useRouter();
+  const { registerConsumer, unregisterConsumer } = useRemoteScanner();
 
   // Core lists
   const [client, setClient] = useState<ClientUser | null>(null);
@@ -106,6 +108,8 @@ export default function ClientFolderPage({ params }: PageProps) {
   const [scannerAction, setScannerAction] = useState<Record<string, 'check-out' | 'check-in'>>({});
   const [activeScannerQuoteId, setActiveScannerQuoteId] = useState<string | null>(null);
   const [isLogisticsScannerOpen, setIsLogisticsScannerOpen] = useState(false);
+  // Tracks the last logistics tab that was activated (enables passive remote scanning without opening modal)
+  const [activeLogisticsQuoteId, setActiveLogisticsQuoteId] = useState<string | null>(null);
 
   const fetchLogistics = async (quoteId: string) => {
     setLoadingLogistics(prev => ({ ...prev, [quoteId]: true }));
@@ -126,6 +130,9 @@ export default function ClientFolderPage({ params }: PageProps) {
     setProjectTabs(prev => ({ ...prev, [projectId]: tab }));
     if (tab === 'logistics' && devisId) {
       fetchLogistics(devisId);
+      setActiveLogisticsQuoteId(devisId);
+    } else if (tab === 'docs') {
+      setActiveLogisticsQuoteId(prev => (prev === devisId ? null : prev));
     }
   };
 
@@ -192,6 +199,38 @@ export default function ClientFolderPage({ params }: PageProps) {
       fetchClientData();
     }
   }, [session, clientId]);
+
+  // Remote scanner — PRIORITY 80: logistics modal open (explicit scan intent)
+  useEffect(() => {
+    if (!isLogisticsScannerOpen || !activeScannerQuoteId) {
+      unregisterConsumer('logistics-modal');
+      return;
+    }
+    registerConsumer('logistics-modal', 80, async (qrCodeId) => {
+      await handleLogisticsScanSuccess(qrCodeId);
+    });
+    return () => unregisterConsumer('logistics-modal');
+  }, [isLogisticsScannerOpen, activeScannerQuoteId, registerConsumer, unregisterConsumer]);
+
+  // Remote scanner — PRIORITY 70: logistics tab active (passive scan, no modal needed)
+  useEffect(() => {
+    if (!activeLogisticsQuoteId) {
+      unregisterConsumer('logistics-passive');
+      return;
+    }
+    const action = scannerAction[activeLogisticsQuoteId] ?? 'check-out';
+    registerConsumer('logistics-passive', 70, async (qrCodeId) => {
+      const res = await fetch(`/api/quotes/${activeLogisticsQuoteId}/logistics`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, qrCodeId }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Erreur lors du scan logistique.');
+      fetchLogistics(activeLogisticsQuoteId);
+    });
+    return () => unregisterConsumer('logistics-passive');
+  }, [activeLogisticsQuoteId, scannerAction, registerConsumer, unregisterConsumer]);
 
   const fetchClientData = async () => {
     setLoading(true);
@@ -721,7 +760,7 @@ export default function ClientFolderPage({ params }: PageProps) {
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '10px' }}>
                                   {stillRented.map(item => (
                                     <span key={item.id} style={{ fontSize: '12px', fontFamily: 'monospace', padding: '3px 8px', borderRadius: '6px', backgroundColor: 'rgba(255,159,10,0.15)', color: '#ff9f0a' }}>
-                                      {item.itemName} ({item.qrCodeId})
+                                      {item.itemName}{item.qrCodeId ? ` (${item.qrCodeId})` : ' (QR en attente)'}
                                     </span>
                                   ))}
                                 </div>

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import { auth } from '@/lib/auth';
 import { db } from '@/db';
-import { equipment as equipmentTable, setting as settingTable } from '@/db/schema';
+import { equipment as equipmentTable, productItems as productItemsTable, setting as settingTable } from '@/db/schema';
 import { getEquipmentWithQuantity, syncProductItems } from '@/db/queries';
 import { eq } from 'drizzle-orm';
 import { CATALOGUE } from '@/lib/catalogue-data';
@@ -140,7 +140,7 @@ export async function POST(request: Request) {
 
     // 2. Parse request body
     const body = await request.json();
-    const { name, brand, cat, desc, specs, price, priceType, priceTax, purchasePrice, quantity, image } = body;
+    const { name, brand, cat, desc, specs, price, priceType, priceTax, purchasePrice, itemCount, image } = body;
 
     if (!name || !brand || !cat || !desc || !specs) {
       return NextResponse.json({ success: false, error: 'Champs obligatoires manquants.' }, { status: 400 });
@@ -181,8 +181,17 @@ export async function POST(request: Request) {
       image: image || null,
     });
 
-    // 5. Create product items matching requested quantity
-    await syncProductItems(id, Number(quantity) || 1);
+    // 5. Create product items without QR codes (to be assigned later by scanning)
+    const count = Number(itemCount) || 0;
+    if (count > 0) {
+      await db.insert(productItemsTable).values(
+        Array.from({ length: count }, (_, i) => ({
+          productId: id,
+          itemName: `${name} ${i + 1}`,
+          status: 'AVAILABLE' as const,
+        }))
+      );
+    }
 
     return NextResponse.json({ success: true, message: 'Équipement ajouté au catalogue.' });
   } catch (error: any) {

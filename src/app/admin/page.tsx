@@ -7,6 +7,7 @@ import { authClient } from '@/lib/auth-client';
 import Header from '@/components/header';
 import Footer from '@/components/footer';
 import ScannerModal from '@/components/scanner-modal';
+import { useRemoteScanner } from '@/lib/remote-scanner-context';
 import { Loader2, Plus, Edit2, Trash2, Users, Sliders, DollarSign, TrendingUp, BarChart3, Info, ChevronLeft, Tag, FileText, CreditCard, Camera, QrCode } from 'lucide-react';
 
 interface EquipmentItem {
@@ -42,6 +43,12 @@ export default function AdminDashboard() {
   const { data: session, isPending } = authClient.useSession();
   const router = useRouter();
   const hasConfirmedAdmin = useRef(false);
+  const { registerConsumer, unregisterConsumer } = useRemoteScanner();
+
+  // Refs for stable remote scan handler closures
+  const equipmentRef = useRef<EquipmentItem[]>([]);
+  const editingItemRef = useRef<EquipmentItem | null>(null);
+  const assigningQrToItemIdRef = useRef<string | null>(null);
 
   // Views: 'list' | 'add' | 'edit'
   const [view, setView] = useState<'list' | 'add' | 'edit'>('list');
@@ -79,7 +86,8 @@ export default function AdminDashboard() {
   const [priceTax, setPriceTax] = useState<'HT' | 'TTC'>('HT');
   const [price, setPrice] = useState('');
   const [purchasePrice, setPurchasePrice] = useState('');
-  const [quantity, setQuantity] = useState('');
+  const [newItemsCount, setNewItemsCount] = useState(0);
+  const [assigningQrToItemId, setAssigningQrToItemId] = useState<string | null>(null);
   const [image, setImage] = useState('');
   const [formError, setFormError] = useState('');
   const [formLoading, setFormLoading] = useState(false);
@@ -470,6 +478,76 @@ export default function AdminDashboard() {
     }
   }, [session]);
 
+  // Keep refs in sync for remote scan handler closures
+  useEffect(() => { equipmentRef.current = equipment; }, [equipment]);
+  useEffect(() => { editingItemRef.current = editingItem; }, [editingItem]);
+  useEffect(() => { assigningQrToItemIdRef.current = assigningQrToItemId; }, [assigningQrToItemId]);
+
+  // Remote scanner — PRIORITY 10: global product search (always active on admin page)
+  useEffect(() => {
+    registerConsumer('admin-global-search', 10, async (qrCodeId) => {
+      const res = await fetch(`/api/equipment/scan?qrCodeId=${qrCodeId}`);
+      const data = await res.json();
+      if (data.success && data.productId) {
+        const item = equipmentRef.current.find(e => e.id === data.productId);
+        if (item) {
+          showEditView(item);
+        } else {
+          throw new Error('Équipement introuvable — actualisez la liste.');
+        }
+      } else {
+        throw new Error(data.error || 'QR code non reconnu.');
+      }
+    });
+    return () => unregisterConsumer('admin-global-search');
+  }, [registerConsumer, unregisterConsumer]);
+
+  // Remote scanner — PRIORITY 100: active modal scan (adding/assigning QR or global scan modal)
+  useEffect(() => {
+    if (!isLocalScannerOpen && !isGlobalScannerOpen) {
+      unregisterConsumer('admin-modal-scan');
+      return;
+    }
+    registerConsumer('admin-modal-scan', 100, async (qrCodeId) => {
+      if (isGlobalScannerOpen) {
+        const res = await fetch(`/api/equipment/scan?qrCodeId=${qrCodeId}`);
+        const data = await res.json();
+        if (!data.success || !data.productId) throw new Error(data.error || 'QR code non reconnu.');
+        const item = equipmentRef.current.find(e => e.id === data.productId);
+        if (!item) throw new Error('Équipement introuvable.');
+        showEditView(item);
+        setIsGlobalScannerOpen(false);
+      } else if (isLocalScannerOpen) {
+        const itemId = assigningQrToItemIdRef.current;
+        const eq = editingItemRef.current;
+        if (itemId) {
+          const res = await fetch(`/api/product-items/${itemId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ qrCodeId }),
+          });
+          const data = await res.json();
+          if (!data.success) throw new Error(data.error || "Erreur lors de l'assignation.");
+          if (eq) fetchPhysicalItems(eq.id);
+          setIsLocalScannerOpen(false);
+          setAssigningQrToItemId(null);
+        } else if (eq) {
+          const res = await fetch(`/api/equipment/${eq.id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ qrCodeId }),
+          });
+          const data = await res.json();
+          if (!data.success) throw new Error(data.error || "Erreur lors de l'ajout.");
+          fetchPhysicalItems(eq.id);
+          fetchEquipment();
+          setIsLocalScannerOpen(false);
+        }
+      }
+    });
+    return () => unregisterConsumer('admin-modal-scan');
+  }, [isLocalScannerOpen, isGlobalScannerOpen, registerConsumer, unregisterConsumer]);
+
   const showListView = () => {
     setView('list');
     setEditingItem(null);
@@ -485,7 +563,7 @@ export default function AdminDashboard() {
     setPriceTax('HT');
     setPrice('');
     setPurchasePrice('');
-    setQuantity('1');
+    setNewItemsCount(0);
     setImage('');
     setFormError('');
     setView('add');
@@ -502,7 +580,6 @@ export default function AdminDashboard() {
     setPriceTax(item.priceTax || 'HT');
     setPrice(String(item.price));
     setPurchasePrice(String(item.purchasePrice));
-    setQuantity(String(item.quantity));
     setImage(item.image || '');
     setFormError('');
     setView('edit');
@@ -574,8 +651,32 @@ export default function AdminDashboard() {
   };
 
   const handleLocalScanSuccess = async (qrCodeId: string) => {
+    if (assigningQrToItemId) {
+      // Assigning QR code to an existing item that has none
+      try {
+        const res = await fetch(`/api/product-items/${assigningQrToItemId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ qrCodeId })
+        });
+        const data = await res.json();
+        if (data.success) {
+          if (editingItem) fetchPhysicalItems(editingItem.id);
+          setIsLocalScannerOpen(false);
+          setAssigningQrToItemId(null);
+        } else {
+          alert(data.error || 'Erreur lors de l\'assignation du QR code.');
+        }
+      } catch (e) {
+        console.error(e);
+        alert('Une erreur est survenue.');
+      }
+      return;
+    }
+
     if (!editingItem) return;
 
+    // Creating a new item with a scanned QR code
     try {
       const res = await fetch(`/api/equipment/${editingItem.id}`, {
         method: 'POST',
@@ -585,7 +686,7 @@ export default function AdminDashboard() {
       const data = await res.json();
       if (data.success) {
         fetchPhysicalItems(editingItem.id);
-        fetchEquipment(); // Update main stock count
+        fetchEquipment();
         setIsLocalScannerOpen(false);
       } else {
         alert(data.error || 'Erreur lors de l\'ajout de l\'exemplaire.');
@@ -642,7 +743,7 @@ export default function AdminDashboard() {
           priceTax,
           price: priceType === 'numeric' ? Number(price) : 0,
           purchasePrice: Number(purchasePrice) || 0,
-          quantity: Number(quantity) || 1,
+          itemCount: newItemsCount,
           image: image || null,
         })
       });
@@ -686,7 +787,6 @@ export default function AdminDashboard() {
           priceTax,
           price: priceType === 'numeric' ? Number(price) : 0,
           purchasePrice: Number(purchasePrice) || 0,
-          quantity: Number(quantity) || 1,
           image: image || null,
         })
       });
@@ -1950,12 +2050,54 @@ export default function AdminDashboard() {
                       <label style={{ fontSize: '13px', fontWeight: 600 }}>Prix d'Achat (€) * (Privé)</label>
                       <input type="number" placeholder="2200" value={purchasePrice} onChange={e => setPurchasePrice(e.target.value)} style={{ padding: '10px 16px', borderRadius: '980px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '14px' }} required />
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <label style={{ fontSize: '13px', fontWeight: 600 }}>Quantité stock *</label>
-                      <input type="number" placeholder="4" value={quantity} onChange={e => setQuantity(e.target.value)} style={{ padding: '10px 16px', borderRadius: '980px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '14px' }} required />
-                    </div>
                   </div>
                 </div>
+
+                  {/* Exemplaires physiques */}
+                  <div style={{ borderTop: '1px solid rgba(0,0,0,.06)', paddingTop: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <h4 style={{ fontSize: '16px', fontWeight: 700, margin: 0 }}>Exemplaires Physiques</h4>
+                        <p style={{ fontSize: '12px', color: '#86868b', margin: '4px 0 0' }}>Chaque exemplaire ajouté compte pour 1 unité. Les QR Codes pourront être assignés après la création.</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setNewItemsCount(c => c + 1)}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '8px 16px', borderRadius: '980px', backgroundColor: '#1d1d1f', color: '#ffffff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '13px' }}
+                      >
+                        <Plus style={{ width: '14px', height: '14px' }} />
+                        Ajouter un exemplaire
+                      </button>
+                    </div>
+
+                    {newItemsCount === 0 ? (
+                      <div style={{ padding: '24px', borderRadius: '18px', border: '1px dashed rgba(0,0,0,.15)', textAlign: 'center', color: '#86868b', fontSize: '14px' }}>
+                        Aucun exemplaire ajouté. Cliquez sur le bouton pour en ajouter.
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        {Array.from({ length: newItemsCount }, (_, i) => (
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', borderRadius: '16px', backgroundColor: '#f5f5f7', border: '1px solid rgba(0,0,0,.04)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                              <span style={{ fontWeight: 600, fontSize: '14px' }}>{name || 'Nouveau produit'} {i + 1}</span>
+                              <span style={{ fontSize: '12px', padding: '4px 10px', borderRadius: '980px', backgroundColor: 'rgba(255,149,0,.1)', color: '#e08000', fontWeight: 600 }}>
+                                QR en attente
+                              </span>
+                            </div>
+                            {i === newItemsCount - 1 && (
+                              <button
+                                type="button"
+                                onClick={() => setNewItemsCount(c => c - 1)}
+                                style={{ padding: '6px 14px', borderRadius: '980px', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #fee2e2', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+                              >
+                                Retirer
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
 
                 <div style={{ display: 'flex', gap: '16px', marginTop: '10px' }}>
                   <button
@@ -2290,9 +2432,19 @@ export default function AdminDashboard() {
                           <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', borderRadius: '16px', backgroundColor: '#f5f5f7', border: '1px solid rgba(0,0,0,.04)' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
                               <span style={{ fontWeight: 600, fontSize: '14px' }}>{item.itemName}</span>
-                              <span style={{ fontSize: '12px', fontFamily: 'monospace', padding: '4px 10px', borderRadius: '980px', backgroundColor: 'rgba(0,0,0,.06)', color: '#1d1d1f' }}>
-                                QR: {item.qrCodeId}
-                              </span>
+                              {item.qrCodeId ? (
+                                <span style={{ fontSize: '12px', fontFamily: 'monospace', padding: '4px 10px', borderRadius: '980px', backgroundColor: 'rgba(0,0,0,.06)', color: '#1d1d1f' }}>
+                                  QR: {item.qrCodeId}
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => { setAssigningQrToItemId(item.id); setIsLocalScannerOpen(true); }}
+                                  style={{ fontSize: '12px', padding: '4px 12px', borderRadius: '980px', backgroundColor: 'rgba(255,149,0,.1)', color: '#e08000', fontWeight: 600, border: '1px solid rgba(255,149,0,.3)', cursor: 'pointer' }}
+                                >
+                                  Assigner QR
+                                </button>
+                              )}
                             </div>
                             
                             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -2388,12 +2540,12 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Local Scan Modal (Adding Physical Item) */}
+        {/* Local Scan Modal (Adding Physical Item or Assigning QR) */}
         <ScannerModal
           isOpen={isLocalScannerOpen}
-          onClose={() => setIsLocalScannerOpen(false)}
+          onClose={() => { setIsLocalScannerOpen(false); setAssigningQrToItemId(null); }}
           onScanSuccess={handleLocalScanSuccess}
-          title="Enregistrer un exemplaire"
+          title={assigningQrToItemId ? 'Assigner un QR Code' : 'Enregistrer un exemplaire'}
         />
 
         {/* Global Scan Modal (Search/Redirect) */}

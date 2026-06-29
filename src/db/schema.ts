@@ -37,7 +37,7 @@ export const productItems = pgTable('product_items', {
     .notNull()
     .references(() => equipment.id, { onDelete: 'cascade' }),
   itemName: text('item_name').notNull(),
-  qrCodeId: text('qr_code_id').unique().notNull(),
+  qrCodeId: text('qr_code_id').unique(),
   status: text('status').$type<'AVAILABLE' | 'RENTED' | 'MAINTENANCE'>().default('AVAILABLE').notNull(),
   rentedByQuoteId: text('rented_by_quote_id')
     .references(() => quote.id, { onDelete: 'set null' }),
@@ -114,4 +114,11 @@ export const scanSessions = pgTable('scan_sessions', {
   qrCodeId: text('qr_code_id'),
   status: text('status').$type<'PENDING' | 'SCANNED'>().default('PENDING').notNull(),
   createdAt: timestamp('createdAt').defaultNow().notNull(),
+});
+
+export const remoteScanQueue = pgTable('remote_scan_queue', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  adminId: text('admin_id').notNull(),
+  qrCodeId: text('qr_code_id').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
 });

@@ -3,7 +3,7 @@ import { headers } from 'next/headers';
 import { auth } from '@/lib/auth';
 import { db } from '@/db';
 import { equipment as equipmentTable, productItems as productItemsTable } from '@/db/schema';
-import { getEquipmentItemWithQuantity, syncProductItems } from '@/db/queries';
+import { getEquipmentItemWithQuantity } from '@/db/queries';
 import { eq } from 'drizzle-orm';
 
 export async function GET(
@@ -121,7 +121,7 @@ export async function PUT(
 
     // 2. Parse request body
     const body = await request.json();
-    const { name, brand, cat, desc, specs, price, priceType, priceTax, purchasePrice, quantity, image } = body;
+    const { name, brand, cat, desc, specs, price, priceType, priceTax, purchasePrice, image } = body;
 
     // 3. Find if item exists with quantity
     const existing = await getEquipmentItemWithQuantity(id);
@@ -156,11 +156,6 @@ export async function PUT(
         image: image !== undefined ? image : existing[0].image,
       })
       .where(eq(equipmentTable.id, id));
-
-    // 5. Synchronize product items if quantity is changed
-    if (quantity !== undefined) {
-      await syncProductItems(id, Number(quantity));
-    }
 
     return NextResponse.json({ success: true, message: 'Équipement mis à jour avec succès.' });
   } catch (error: any) {
