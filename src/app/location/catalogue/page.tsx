@@ -270,7 +270,7 @@ export default function LocationCatalogue() {
                     >
                       {/* Product Header Visual area */}
                       <Link href={`/location/catalogue/${item.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
-                        <div style={{ position: 'relative', aspectRatio: '4/3', backgroundColor: '#f5f5f7', overflow: 'hidden' }}>
+                        <div style={{ position: 'relative', aspectRatio: '4/3', backgroundColor: '#ffffff', overflow: 'hidden' }}>
                           {item.image ? (
                             <img src={item.image} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                           ) : (

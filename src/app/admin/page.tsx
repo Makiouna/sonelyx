@@ -49,6 +49,8 @@ export default function AdminDashboard() {
   const equipmentRef = useRef<EquipmentItem[]>([]);
   const editingItemRef = useRef<EquipmentItem | null>(null);
   const assigningQrToItemIdRef = useRef<string | null>(null);
+  const scanningNewItemIndexRef = useRef<number | null>(null);
+  const newItemsQrCodesRef = useRef<Record<number, string>>({});
 
   // Views: 'list' | 'add' | 'edit'
   const [view, setView] = useState<'list' | 'add' | 'edit'>('list');
@@ -100,6 +102,8 @@ export default function AdminDashboard() {
   const [price, setPrice] = useState('');
   const [purchasePrice, setPurchasePrice] = useState('');
   const [newItemsCount, setNewItemsCount] = useState(0);
+  const [newItemsQrCodes, setNewItemsQrCodes] = useState<Record<number, string>>({});
+  const [scanningNewItemIndex, setScanningNewItemIndex] = useState<number | null>(null);
   const [assigningQrToItemId, setAssigningQrToItemId] = useState<string | null>(null);
   const [image, setImage] = useState('');
   const [formError, setFormError] = useState('');
@@ -495,6 +499,8 @@ export default function AdminDashboard() {
   useEffect(() => { equipmentRef.current = equipment; }, [equipment]);
   useEffect(() => { editingItemRef.current = editingItem; }, [editingItem]);
   useEffect(() => { assigningQrToItemIdRef.current = assigningQrToItemId; }, [assigningQrToItemId]);
+  useEffect(() => { scanningNewItemIndexRef.current = scanningNewItemIndex; }, [scanningNewItemIndex]);
+  useEffect(() => { newItemsQrCodesRef.current = newItemsQrCodes; }, [newItemsQrCodes]);
 
   // Remote scanner — PRIORITY 10: global product search (always active on admin page)
   useEffect(() => {
@@ -531,9 +537,16 @@ export default function AdminDashboard() {
         showEditView(item);
         setIsGlobalScannerOpen(false);
       } else if (isLocalScannerOpen) {
+        const newItemIdx = scanningNewItemIndexRef.current;
         const itemId = assigningQrToItemIdRef.current;
         const eq = editingItemRef.current;
-        if (itemId) {
+        if (newItemIdx !== null) {
+          // Scanning QR for a pending item during product creation
+          setNewItemsQrCodes(prev => ({ ...prev, [newItemIdx]: qrCodeId }));
+          setIsLocalScannerOpen(false);
+          setScanningNewItemIndex(null);
+        } else if (itemId) {
+          // Assigning QR to an existing item without one
           const res = await fetch(`/api/product-items/${itemId}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -545,6 +558,7 @@ export default function AdminDashboard() {
           setIsLocalScannerOpen(false);
           setAssigningQrToItemId(null);
         } else if (eq) {
+          // Creating a new item with scanned QR in edit view
           const res = await fetch(`/api/equipment/${eq.id}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -555,6 +569,8 @@ export default function AdminDashboard() {
           fetchPhysicalItems(eq.id);
           fetchEquipment();
           setIsLocalScannerOpen(false);
+        } else {
+          throw new Error('Aucun contexte de scan actif. Réouvrez le scanner.');
         }
       }
     });
@@ -578,6 +594,8 @@ export default function AdminDashboard() {
     setPrice('');
     setPurchasePrice('');
     setNewItemsCount(0);
+    setNewItemsQrCodes({});
+    setScanningNewItemIndex(null);
     setImage('');
     setFormError('');
     setView('add');
@@ -666,8 +684,16 @@ export default function AdminDashboard() {
   };
 
   const handleLocalScanSuccess = async (qrCodeId: string) => {
+    // Case 1: scanning a QR code for a new item during product creation
+    if (scanningNewItemIndex !== null) {
+      setNewItemsQrCodes(prev => ({ ...prev, [scanningNewItemIndex]: qrCodeId }));
+      setIsLocalScannerOpen(false);
+      setScanningNewItemIndex(null);
+      return;
+    }
+
+    // Case 2: assigning a QR code to an existing item without one (in edit view)
     if (assigningQrToItemId) {
-      // Assigning QR code to an existing item that has none
       try {
         const res = await fetch(`/api/product-items/${assigningQrToItemId}`, {
           method: 'PATCH',
@@ -757,7 +783,9 @@ export default function AdminDashboard() {
           priceTax,
           price: priceType === 'numeric' ? Number(price) : 0,
           purchasePrice: Number(purchasePrice) || 0,
-          itemCount: newItemsCount,
+          items: Array.from({ length: newItemsCount }, (_, i) => ({
+            qrCodeId: newItemsQrCodes[i] || null,
+          })),
           image: image || null,
         })
       });
@@ -2174,21 +2202,46 @@ export default function AdminDashboard() {
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                         {Array.from({ length: newItemsCount }, (_, i) => (
                           <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', borderRadius: '16px', backgroundColor: '#f5f5f7', border: '1px solid rgba(0,0,0,.04)' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                               <span style={{ fontWeight: 600, fontSize: '14px' }}>{name || 'Nouveau produit'} {i + 1}</span>
-                              <span style={{ fontSize: '12px', padding: '4px 10px', borderRadius: '980px', backgroundColor: 'rgba(255,149,0,.1)', color: '#e08000', fontWeight: 600 }}>
-                                QR en attente
-                              </span>
+                              {newItemsQrCodes[i] ? (
+                                <span style={{ fontSize: '12px', fontFamily: 'monospace', padding: '4px 10px', borderRadius: '980px', backgroundColor: 'rgba(52,199,89,.12)', color: '#1a8a3a', fontWeight: 600 }}>
+                                  QR: {newItemsQrCodes[i]}
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => { setScanningNewItemIndex(i); setIsLocalScannerOpen(true); }}
+                                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '4px 12px', borderRadius: '980px', backgroundColor: 'rgba(255,149,0,.1)', color: '#e08000', fontWeight: 600, border: '1px solid rgba(255,149,0,.3)', cursor: 'pointer' }}
+                                >
+                                  <Camera style={{ width: '12px', height: '12px' }} />
+                                  Scanner QR
+                                </button>
+                              )}
                             </div>
-                            {i === newItemsCount - 1 && (
-                              <button
-                                type="button"
-                                onClick={() => setNewItemsCount(c => c - 1)}
-                                style={{ padding: '6px 14px', borderRadius: '980px', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #fee2e2', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
-                              >
-                                Retirer
-                              </button>
-                            )}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              {newItemsQrCodes[i] && (
+                                <button
+                                  type="button"
+                                  onClick={() => setNewItemsQrCodes(prev => { const n = { ...prev }; delete n[i]; return n; })}
+                                  style={{ fontSize: '12px', padding: '4px 10px', borderRadius: '980px', backgroundColor: 'transparent', color: '#86868b', border: '1px solid rgba(0,0,0,.12)', cursor: 'pointer' }}
+                                >
+                                  Changer QR
+                                </button>
+                              )}
+                              {i === newItemsCount - 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setNewItemsCount(c => c - 1);
+                                    setNewItemsQrCodes(prev => { const n = { ...prev }; delete n[newItemsCount - 1]; return n; });
+                                  }}
+                                  style={{ padding: '6px 14px', borderRadius: '980px', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #fee2e2', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+                                >
+                                  Retirer
+                                </button>
+                              )}
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -2720,9 +2773,9 @@ export default function AdminDashboard() {
         {/* Local Scan Modal (Adding Physical Item or Assigning QR) */}
         <ScannerModal
           isOpen={isLocalScannerOpen}
-          onClose={() => { setIsLocalScannerOpen(false); setAssigningQrToItemId(null); }}
+          onClose={() => { setIsLocalScannerOpen(false); setAssigningQrToItemId(null); setScanningNewItemIndex(null); }}
           onScanSuccess={handleLocalScanSuccess}
-          title={assigningQrToItemId ? 'Assigner un QR Code' : 'Enregistrer un exemplaire'}
+          title={scanningNewItemIndex !== null ? 'Scanner le QR Code' : assigningQrToItemId ? 'Assigner un QR Code' : 'Enregistrer un exemplaire'}
         />
 
         {/* Global Scan Modal (Search/Redirect) */}

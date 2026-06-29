@@ -140,7 +140,7 @@ export async function POST(request: Request) {
 
     // 2. Parse request body
     const body = await request.json();
-    const { name, brand, cat, desc, specs, price, priceType, priceTax, purchasePrice, itemCount, image } = body;
+    const { name, brand, cat, desc, specs, price, priceType, priceTax, purchasePrice, items, image } = body;
 
     if (!name || !brand || !cat || !desc || !specs) {
       return NextResponse.json({ success: false, error: 'Champs obligatoires manquants.' }, { status: 400 });
@@ -181,13 +181,14 @@ export async function POST(request: Request) {
       image: image || null,
     });
 
-    // 5. Create product items without QR codes (to be assigned later by scanning)
-    const count = Number(itemCount) || 0;
-    if (count > 0) {
+    // 5. Create product items (with optional QR codes)
+    const itemsArray: { qrCodeId?: string | null }[] = Array.isArray(items) ? items : [];
+    if (itemsArray.length > 0) {
       await db.insert(productItemsTable).values(
-        Array.from({ length: count }, (_, i) => ({
+        itemsArray.map((item, i) => ({
           productId: id,
           itemName: `${name} ${i + 1}`,
+          qrCodeId: item.qrCodeId || null,
           status: 'AVAILABLE' as const,
         }))
       );
