@@ -8,6 +8,12 @@ export const auth = betterAuth({
     provider: 'pg',
     schema: schema,
   }),
+  baseURL: process.env.BETTER_AUTH_URL || 'http://localhost:3000',
+  trustedOrigins: [
+    'http://localhost:3000',
+    'https://sonelyx.fr',
+    'https://www.sonelyx.fr',
+  ],
   emailAndPassword: {
     enabled: true,
   },
