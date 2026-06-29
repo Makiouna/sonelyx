@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { authClient } from '@/lib/auth-client';
@@ -41,6 +41,7 @@ interface UserItem {
 export default function AdminDashboard() {
   const { data: session, isPending } = authClient.useSession();
   const router = useRouter();
+  const hasConfirmedAdmin = useRef(false);
 
   // Views: 'list' | 'add' | 'edit'
   const [view, setView] = useState<'list' | 'add' | 'edit'>('list');
@@ -117,9 +118,15 @@ export default function AdminDashboard() {
   const [editDiscount, setEditDiscount] = useState(0);
   const [clientSearch, setClientSearch] = useState('');
 
-  // Security route guard
+  // Security route guard — once admin is confirmed, never redirect again
+  // (prevents spurious redirects during background session re-fetches)
   useEffect(() => {
-    if (!isPending && (!session || (session.user as any).role !== 'admin')) {
+    if (isPending) return;
+    if (session && (session.user as any).role === 'admin') {
+      hasConfirmedAdmin.current = true;
+      return;
+    }
+    if (!hasConfirmedAdmin.current) {
       router.push('/');
     }
   }, [isPending, session, router]);
