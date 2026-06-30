@@ -65,7 +65,7 @@ export async function POST(request: Request) {
       },
       description: `Caution — Devis #${quote.id}`,
       receipt_email: userEmail ?? undefined,
-    });
+    }, { idempotencyKey: `deposit_init_${quoteId}_${Date.now()}` });
 
     // Persist the PaymentIntent ID and mark deposit as PENDING
     await db

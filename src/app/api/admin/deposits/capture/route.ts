@@ -39,7 +39,9 @@ export async function POST(request: Request) {
       captureParams.amount_to_capture = Math.round(amountToCapture * 100);
     }
 
-    await stripe.paymentIntents.capture(quote.stripePaymentIntentId, captureParams);
+    await stripe.paymentIntents.capture(quote.stripePaymentIntentId, captureParams, {
+      idempotencyKey: `deposit_capture_${quote.stripePaymentIntentId}`,
+    });
 
     await db
       .update(quoteTable)

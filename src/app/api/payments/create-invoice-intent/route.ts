@@ -74,7 +74,7 @@ export async function POST(request: Request) {
       },
       description: `Paiement — ${quote.docType === 'facture' ? 'Facture' : 'Devis'} #${quote.id}`,
       receipt_email: userEmail ?? undefined,
-    });
+    }, { idempotencyKey: `invoice_init_${quoteId}_${Date.now()}` });
 
     await db
       .update(quoteTable)

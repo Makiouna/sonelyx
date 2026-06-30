@@ -19,7 +19,8 @@ export async function POST(request: Request) {
   try {
     event = stripe.webhooks.constructEvent(body, sig, process.env.STRIPE_WEBHOOK_SECRET!);
   } catch (err: any) {
-    return NextResponse.json({ error: `Webhook signature invalid: ${err.message}` }, { status: 400 });
+    console.error('[SECURITY] Stripe webhook signature verification failed — possible spoofing attempt:', err.message);
+    return NextResponse.json({ error: 'Webhook signature invalid.' }, { status: 400 });
   }
 
   const paymentIntent = event.data.object as Stripe.PaymentIntent;

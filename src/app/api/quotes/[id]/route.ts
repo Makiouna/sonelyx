@@ -80,8 +80,14 @@ export async function PUT(
     const updates: any = { updatedAt: new Date() };
 
     if (status !== undefined) {
-      if (!['draft', 'pending', 'modified_by_admin', 'pdf_pending', 'validated', 'cancelled', 'locked'].includes(status)) {
+      const adminOnlyStatuses = ['modified_by_admin', 'pdf_pending', 'validated', 'cancelled', 'locked'];
+      if (!['draft', 'pending', ...adminOnlyStatuses].includes(status)) {
         return NextResponse.json({ success: false, error: 'Statut invalide.' }, { status: 400 });
+      }
+
+      // Non-admins can only switch between draft and pending (Vuln 3 fix)
+      if (!isAdmin && adminOnlyStatuses.includes(status)) {
+        return NextResponse.json({ success: false, error: 'Statut non autorisé.' }, { status: 403 });
       }
 
       // When admin saves a modification, snapshot the current version before overwriting
@@ -105,12 +111,16 @@ export async function PUT(
     if (startDate !== undefined) updates.startDate = startDate;
     if (endDate !== undefined) updates.endDate = endDate;
     if (notes !== undefined) updates.notes = notes;
-    if (items !== undefined) updates.items = JSON.stringify(items);
-    if (totalHT !== undefined) updates.totalHT = Number(totalHT);
-    if (totalTTC !== undefined) updates.totalTTC = Number(totalTTC);
-    if (pdfUrl !== undefined) updates.pdfUrl = pdfUrl;
-    if (discount !== undefined) updates.discount = Number(discount);
     if (projectName !== undefined) updates.projectName = projectName || null;
+
+    // Financial fields and pdfUrl are admin-only (Vuln 1 & 3 fix)
+    if (isAdmin) {
+      if (items !== undefined) updates.items = JSON.stringify(items);
+      if (totalHT !== undefined) updates.totalHT = Number(totalHT);
+      if (totalTTC !== undefined) updates.totalTTC = Number(totalTTC);
+      if (pdfUrl !== undefined) updates.pdfUrl = pdfUrl;
+      if (discount !== undefined) updates.discount = Number(discount);
+    }
 
     // Fetch client email/name if updated by admin
     let clientEmail = '';

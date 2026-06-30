@@ -22,6 +22,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: 'Devis introuvable.' }, { status: 404 });
     }
 
+    const quote = rows[0];
+
+    // State machine: prevent modifying the amount once a Stripe hold is active
+    if (quote.depositStatus && ['AUTHORIZED', 'CAPTURED'].includes(quote.depositStatus)) {
+      return NextResponse.json(
+        { success: false, error: 'Impossible de modifier une caution déjà autorisée ou encaissée.' },
+        { status: 400 }
+      );
+    }
+
     const amount = Number(depositAmount);
     if (isNaN(amount) || amount < 0) {
       return NextResponse.json({ success: false, error: 'Montant invalide.' }, { status: 400 });

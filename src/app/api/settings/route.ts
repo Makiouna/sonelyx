@@ -50,23 +50,45 @@ async function getOrInitEmailSettings() {
 
 export async function GET() {
   try {
-    const [tvaRate, coeffWeekend, coeff3Jours, coeffSemaine, iban, bic, paymentInstructions, emailSettings] = await Promise.all([
+    const session = await auth.api.getSession({ headers: await headers() });
+    const isAdmin = session?.user && (session.user as any).role === 'admin';
+
+    // Pricing coefficients are public (needed for unauthenticated cart display)
+    const [tvaRate, coeffWeekend, coeff3Jours, coeffSemaine] = await Promise.all([
       getOrInitSetting('tva_rate', '20'),
       getOrInitSetting('coeff_weekend', '1.4'),
       getOrInitSetting('coeff_3jours', '1.8'),
       getOrInitSetting('coeff_semaine', '3.0'),
-      getOrInitSetting('payment_iban', ''),
-      getOrInitSetting('payment_bic', ''),
-      getOrInitSetting('payment_instructions', ''),
-      getOrInitEmailSettings(),
     ]);
 
-    return NextResponse.json({
+    const publicResponse = {
       success: true,
       tvaRate: Number(tvaRate) || 20,
       coeffWeekend: Number(coeffWeekend) || 1.4,
       coeff3Jours: Number(coeff3Jours) || 1.8,
       coeffSemaine: Number(coeffSemaine) || 3.0,
+    };
+
+    // IBAN/BIC/payment instructions are only for authenticated users
+    if (!session?.user) {
+      return NextResponse.json(publicResponse);
+    }
+
+    const [iban, bic, paymentInstructions] = await Promise.all([
+      getOrInitSetting('payment_iban', ''),
+      getOrInitSetting('payment_bic', ''),
+      getOrInitSetting('payment_instructions', ''),
+    ]);
+
+    // Email templates are admin-only
+    if (!isAdmin) {
+      return NextResponse.json({ ...publicResponse, iban, bic, paymentInstructions });
+    }
+
+    const emailSettings = await getOrInitEmailSettings();
+
+    return NextResponse.json({
+      ...publicResponse,
       iban,
       bic,
       paymentInstructions,

@@ -45,7 +45,9 @@ export async function POST(request: Request) {
     // 2. Release Stripe deposit if still authorized (non-destructive — only cancels the hold)
     if (quote.stripePaymentIntentId && quote.depositStatus === 'AUTHORIZED') {
       try {
-        await stripe.paymentIntents.cancel(quote.stripePaymentIntentId);
+        await stripe.paymentIntents.cancel(quote.stripePaymentIntentId, undefined, {
+          idempotencyKey: `deposit_cancel_${quote.stripePaymentIntentId}`,
+        });
       } catch {}
     }
 

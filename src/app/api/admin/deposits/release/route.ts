@@ -33,7 +33,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, error: 'Aucun PaymentIntent associé.' }, { status: 400 });
     }
 
-    await stripe.paymentIntents.cancel(quote.stripePaymentIntentId);
+    await stripe.paymentIntents.cancel(quote.stripePaymentIntentId, undefined, {
+      idempotencyKey: `deposit_release_${quote.stripePaymentIntentId}`,
+    });
 
     await db
       .update(quoteTable)
