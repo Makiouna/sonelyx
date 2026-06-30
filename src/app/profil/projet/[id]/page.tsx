@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { authClient } from '@/lib/auth-client';
 import Header from '@/components/header';
 import Footer from '@/components/footer';
+import DepositWidget from '@/components/deposit-widget';
 import {
   Loader2, FileText, Trash2, Send, Calendar,
   AlertTriangle, ChevronDown, ChevronUp, Check, X,
@@ -376,6 +377,7 @@ export default function ProjectPage({ params }: PageProps) {
 
         {validated.map(vq => {
           const isOpen = openDetailId === vq.id;
+          const hasDeposit = !!vq.depositAmount && vq.depositAmount > 0;
           return (
             <div key={vq.id} style={{ border: '1px solid rgba(0,0,0,.06)', borderRadius: 14, overflow: 'hidden' }}>
               <div style={{ padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
@@ -387,6 +389,9 @@ export default function ProjectPage({ params }: PageProps) {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                   <span style={{ fontWeight: 700, fontSize: 13 }}>{vq.totalHT.toLocaleString('fr-FR')} € HT</span>
+                  {hasDeposit && vq.depositStatus === 'PENDING' && (
+                    <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: '980px', backgroundColor: '#fff3cd', color: '#d97706' }}>Caution requise</span>
+                  )}
                   <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: '980px', backgroundColor: '#e2fbe8', color: '#1db954' }}>Validé</span>
                   <button onClick={() => setOpenDetailId(isOpen ? null : vq.id)}
                     style={{ display: 'inline-flex', alignItems: 'center', background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: '#86868b' }}>
@@ -395,6 +400,17 @@ export default function ProjectPage({ params }: PageProps) {
                 </div>
               </div>
               {isOpen && <DetailPanel q={vq} />}
+              {/* Deposit widget — shown for devis with a deposit amount set */}
+              {hasDeposit && (
+                <div style={{ borderTop: '1px solid rgba(0,0,0,.06)', padding: '18px 16px', backgroundColor: vq.depositStatus === 'PENDING' ? '#fffbeb' : '#fafafa' }}>
+                  <DepositWidget
+                    quoteId={vq.id}
+                    depositAmount={vq.depositAmount!}
+                    depositStatus={vq.depositStatus ?? 'PENDING'}
+                    onStatusChange={fetchQuotes}
+                  />
+                </div>
+              )}
             </div>
           );
         })}

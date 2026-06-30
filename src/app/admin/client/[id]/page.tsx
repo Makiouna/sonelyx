@@ -23,6 +23,10 @@ import {
   Lock,
   PackageCheck,
   Camera,
+  Shield,
+  ShieldCheck,
+  ShieldAlert,
+  Euro,
 } from 'lucide-react';
 import { groupQuotesByProject, getProjectStatus, projectStatusLabel, projectStatusColors } from '@/lib/project-grouping';
 import ScannerModal from '@/components/scanner-modal';
@@ -71,6 +75,9 @@ interface Quote {
   totalTTC: number;
   pdfUrl: string | null;
   discount: number;
+  depositAmount: number | null;
+  depositStatus: 'PENDING' | 'AUTHORIZED' | 'CAPTURED' | 'RELEASED' | 'BYPASSED' | null;
+  stripePaymentIntentId: string | null;
   createdAt: string;
   updatedAt: string;
   userName: string;
@@ -182,6 +189,12 @@ export default function ClientFolderPage({ params }: PageProps) {
 
   // PDF file upload state
   const [pdfFileMap, setPdfFileMap] = useState<{ [quoteId: string]: File | null }>({});
+
+  // Deposit / caution admin state
+  const [depositAmountInput, setDepositAmountInput] = useState<{ [quoteId: string]: string }>({});
+  const [depositActionLoading, setDepositActionLoading] = useState<string | null>(null);
+  const [captureAmountInput, setCaptureAmountInput] = useState<{ [quoteId: string]: string }>({});
+  const [showCaptureModal, setShowCaptureModal] = useState<string | null>(null);
 
   // Payment settings (IBAN/BIC for display under invoices)
   const [paymentSettings, setPaymentSettings] = useState<{ iban: string; bic: string; instructions: string } | null>(null);
@@ -328,6 +341,52 @@ export default function ClientFolderPage({ params }: PageProps) {
     }
   };
 
+  const handleSetDepositAmount = async (quoteId: string) => {
+    const amount = parseFloat(depositAmountInput[quoteId] ?? '0');
+    if (isNaN(amount) || amount < 0) { alert('Montant invalide.'); return; }
+    setDepositActionLoading(quoteId + '-set');
+    try {
+      const res = await fetch('/api/admin/deposits/set-amount', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quoteId, depositAmount: amount }),
+      });
+      const data = await res.json();
+      if (data.success) { fetchClientData(); } else { alert(data.error || 'Erreur'); }
+    } catch { alert('Erreur réseau.'); }
+    finally { setDepositActionLoading(null); }
+  };
+
+  const handleDepositRelease = async (quoteId: string) => {
+    if (!confirm('Libérer la caution ? L\'empreinte bancaire sera annulée.')) return;
+    setDepositActionLoading(quoteId + '-release');
+    try {
+      const res = await fetch('/api/admin/deposits/release', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quoteId }),
+      });
+      const data = await res.json();
+      if (data.success) { fetchClientData(); } else { alert(data.error || 'Erreur'); }
+    } catch { alert('Erreur réseau.'); }
+    finally { setDepositActionLoading(null); }
+  };
+
+  const handleDepositCapture = async (quoteId: string) => {
+    const partial = parseFloat(captureAmountInput[quoteId] ?? '');
+    setDepositActionLoading(quoteId + '-capture');
+    try {
+      const res = await fetch('/api/admin/deposits/capture', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quoteId, amountToCapture: isNaN(partial) ? undefined : partial }),
+      });
+      const data = await res.json();
+      if (data.success) { setShowCaptureModal(null); fetchClientData(); } else { alert(data.error || 'Erreur'); }
+    } catch { alert('Erreur réseau.'); }
+    finally { setDepositActionLoading(null); }
+  };
+
   const handleLockDevis = async (devisId: string) => {
     setActionLoading(devisId + '-lock');
     try {
@@ -341,6 +400,26 @@ export default function ClientFolderPage({ params }: PageProps) {
         fetchClientData();
       } else {
         alert(data.error || 'Erreur.');
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Erreur.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleDeleteQuote = async (quoteId: string, docType: string) => {
+    const label = docType === 'facture' ? 'cette facture' : docType === 'avoir' ? 'cet avoir' : 'ce devis';
+    if (!window.confirm(`Supprimer définitivement ${label} (#${quoteId}) ? Cette action est irréversible.`)) return;
+    setActionLoading(quoteId + '-delete');
+    try {
+      const res = await fetch(`/api/quotes/${quoteId}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        fetchClientData();
+      } else {
+        alert(data.error || 'Erreur lors de la suppression.');
       }
     } catch (e) {
       console.error(e);
@@ -1103,8 +1182,137 @@ export default function ClientFolderPage({ params }: PageProps) {
                                             <span style={{ fontSize: '12px', fontWeight: 700, color: '#15803d' }}>Règlement confirmé — inventaire verrouillé</span>
                                           </div>
                                         )}
+                                        <button
+                                          title={`Supprimer ${q.docType === 'facture' ? 'la facture' : q.docType === 'avoir' ? "l'avoir" : 'le devis'}`}
+                                          onClick={() => handleDeleteQuote(q.id, q.docType)}
+                                          disabled={actionLoading === q.id + '-delete'}
+                                          style={{ marginLeft: 'auto', padding: '6px', borderRadius: '8px', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid rgba(239,68,68,.25)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', opacity: actionLoading === q.id + '-delete' ? 0.5 : 1 }}
+                                        >
+                                          {actionLoading === q.id + '-delete'
+                                            ? <Loader2 style={{ width: '13px', height: '13px', animation: 'spin 1s linear infinite' }} />
+                                            : <Trash2 style={{ width: '13px', height: '13px' }} />}
+                                        </button>
                                       </div>
                                     </div>
+
+                                    {/* ── Deposit / Caution panel (validated & locked devis) ── */}
+                                    {(q.status === 'validated' || q.status === 'locked') && (
+                                      <div style={{ marginTop: '14px', padding: '16px', borderRadius: '14px', backgroundColor: '#f5f5f7', border: '1px solid rgba(0,0,0,.06)' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                                          <Shield style={{ width: '15px', height: '15px', color: '#6e6e73' }} />
+                                          <span style={{ fontSize: '12px', fontWeight: 800, color: '#1d1d1f', textTransform: 'uppercase' as const, letterSpacing: '.05em' }}>Caution / Empreinte bancaire</span>
+                                          {q.depositStatus && (
+                                            <span style={{
+                                              fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '980px',
+                                              backgroundColor: q.depositStatus === 'AUTHORIZED' ? '#e8f1fd' : q.depositStatus === 'CAPTURED' ? '#fef2f2' : q.depositStatus === 'RELEASED' ? '#e2fbe8' : '#fff3cd',
+                                              color: q.depositStatus === 'AUTHORIZED' ? '#0071e3' : q.depositStatus === 'CAPTURED' ? '#ef4444' : q.depositStatus === 'RELEASED' ? '#15803d' : '#d97706',
+                                            }}>
+                                              {q.depositStatus === 'AUTHORIZED' ? 'Autorisée' : q.depositStatus === 'CAPTURED' ? 'Encaissée' : q.depositStatus === 'RELEASED' ? 'Libérée' : 'En attente'}
+                                            </span>
+                                          )}
+                                        </div>
+
+                                        {/* Set/update deposit amount */}
+                                        {(!q.depositStatus || q.depositStatus === 'PENDING') && (
+                                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: q.depositAmount ? '12px' : '0' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '980px', border: '1px solid rgba(0,0,0,.12)', backgroundColor: '#fff', flex: 1, maxWidth: '180px' }}>
+                                              <Euro style={{ width: '12px', height: '12px', color: '#86868b', flexShrink: 0 }} />
+                                              <input
+                                                type="number"
+                                                placeholder="Montant"
+                                                min="0"
+                                                step="0.01"
+                                                value={depositAmountInput[q.id] ?? (q.depositAmount ? String(q.depositAmount) : '')}
+                                                onChange={e => setDepositAmountInput(prev => ({ ...prev, [q.id]: e.target.value }))}
+                                                style={{ border: 'none', outline: 'none', fontSize: '12px', width: '100%', fontFamily: 'inherit', backgroundColor: 'transparent' }}
+                                              />
+                                            </div>
+                                            <button
+                                              onClick={() => handleSetDepositAmount(q.id)}
+                                              disabled={depositActionLoading === q.id + '-set'}
+                                              style={{ padding: '6px 14px', borderRadius: '980px', backgroundColor: '#1d1d1f', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' as const }}
+                                            >
+                                              {depositActionLoading === q.id + '-set' ? <Loader2 style={{ width: '11px', height: '11px', animation: 'spin 1s linear infinite' }} /> : <Shield style={{ width: '11px', height: '11px' }} />}
+                                              {q.depositAmount ? 'Modifier' : 'Définir la caution'}
+                                            </button>
+                                          </div>
+                                        )}
+
+                                        {/* AUTHORIZED: offer release or capture */}
+                                        {q.depositStatus === 'AUTHORIZED' && (
+                                          <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: '8px', alignItems: 'center' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 700, color: '#0071e3' }}>
+                                              <ShieldCheck style={{ width: '15px', height: '15px' }} />
+                                              {q.depositAmount?.toLocaleString('fr-FR')} € bloqués
+                                            </div>
+                                            <button
+                                              onClick={() => handleDepositRelease(q.id)}
+                                              disabled={depositActionLoading === q.id + '-release'}
+                                              style={{ padding: '6px 14px', borderRadius: '980px', backgroundColor: '#e2fbe8', color: '#15803d', border: '1px solid rgba(21,128,61,.2)', cursor: 'pointer', fontWeight: 700, fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                            >
+                                              {depositActionLoading === q.id + '-release' ? <Loader2 style={{ width: '11px', height: '11px', animation: 'spin 1s linear infinite' }} /> : <ShieldCheck style={{ width: '11px', height: '11px' }} />}
+                                              Libérer la caution
+                                            </button>
+                                            <button
+                                              onClick={() => setShowCaptureModal(q.id)}
+                                              disabled={depositActionLoading === q.id + '-capture'}
+                                              style={{ padding: '6px 14px', borderRadius: '980px', backgroundColor: '#fef2f2', color: '#ef4444', border: '1px solid rgba(239,68,68,.2)', cursor: 'pointer', fontWeight: 700, fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                            >
+                                              <ShieldAlert style={{ width: '11px', height: '11px' }} />
+                                              Encaisser la caution
+                                            </button>
+
+                                            {/* Inline capture modal */}
+                                            {showCaptureModal === q.id && (
+                                              <div style={{ width: '100%', marginTop: '8px', padding: '14px', backgroundColor: '#fef2f2', border: '1px solid rgba(239,68,68,.2)', borderRadius: '12px', display: 'flex', flexDirection: 'column' as const, gap: '10px' }}>
+                                                <div style={{ fontSize: '12px', fontWeight: 700, color: '#b91c1c' }}>
+                                                  Montant à encaisser (laisser vide pour encaisser la totalité : {q.depositAmount?.toLocaleString('fr-FR')} €)
+                                                </div>
+                                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '980px', border: '1px solid rgba(239,68,68,.25)', backgroundColor: '#fff', flex: 1, maxWidth: '160px' }}>
+                                                    <Euro style={{ width: '12px', height: '12px', color: '#ef4444', flexShrink: 0 }} />
+                                                    <input
+                                                      type="number"
+                                                      placeholder={`max ${q.depositAmount}`}
+                                                      min="1"
+                                                      max={q.depositAmount ?? undefined}
+                                                      step="0.01"
+                                                      value={captureAmountInput[q.id] ?? ''}
+                                                      onChange={e => setCaptureAmountInput(prev => ({ ...prev, [q.id]: e.target.value }))}
+                                                      style={{ border: 'none', outline: 'none', fontSize: '12px', width: '100%', fontFamily: 'inherit', backgroundColor: 'transparent' }}
+                                                    />
+                                                  </div>
+                                                  <button
+                                                    onClick={() => handleDepositCapture(q.id)}
+                                                    disabled={depositActionLoading === q.id + '-capture'}
+                                                    style={{ padding: '6px 14px', borderRadius: '980px', backgroundColor: '#ef4444', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                                                  >
+                                                    {depositActionLoading === q.id + '-capture' ? <Loader2 style={{ width: '11px', height: '11px', animation: 'spin 1s linear infinite' }} /> : 'Confirmer encaissement'}
+                                                  </button>
+                                                  <button onClick={() => setShowCaptureModal(null)} style={{ padding: '6px 10px', borderRadius: '980px', border: '1px solid rgba(0,0,0,.12)', backgroundColor: 'transparent', cursor: 'pointer', color: '#6e6e73', fontSize: '12px' }}>
+                                                    Annuler
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+
+                                        {q.depositStatus === 'CAPTURED' && (
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 700, color: '#ef4444' }}>
+                                            <ShieldAlert style={{ width: '15px', height: '15px' }} />
+                                            Caution encaissée — {q.depositAmount?.toLocaleString('fr-FR')} €
+                                          </div>
+                                        )}
+
+                                        {q.depositStatus === 'RELEASED' && (
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 700, color: '#15803d' }}>
+                                            <ShieldCheck style={{ width: '15px', height: '15px' }} />
+                                            Caution libérée — aucun prélèvement
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                               );
@@ -1168,6 +1376,14 @@ export default function ClientFolderPage({ params }: PageProps) {
                                         </button>
                                       </>
                                     )}
+                                    <button
+                                      title="Supprimer la facture"
+                                      onClick={() => handleDeleteQuote(q.id, q.docType)}
+                                      disabled={actionLoading === q.id + '-delete'}
+                                      style={{ marginLeft: 'auto', padding: '6px', borderRadius: '8px', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid rgba(239,68,68,.25)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', opacity: actionLoading === q.id + '-delete' ? 0.5 : 1 }}
+                                    >
+                                      {actionLoading === q.id + '-delete' ? <Loader2 style={{ width: '13px', height: '13px', animation: 'spin 1s linear infinite' }} /> : <Trash2 style={{ width: '13px', height: '13px' }} />}
+                                    </button>
                                   </div>
                                 </div>
                               </div>
@@ -1190,6 +1406,14 @@ export default function ClientFolderPage({ params }: PageProps) {
                                       <Download style={{ width: '11px', height: '11px' }} /> PDF
                                     </a>
                                   )}
+                                  <button
+                                    title={`Supprimer ${dt === 'avoir' ? "l'avoir" : 'le contrat'}`}
+                                    onClick={() => handleDeleteQuote(q.id, q.docType)}
+                                    disabled={actionLoading === q.id + '-delete'}
+                                    style={{ padding: '6px', borderRadius: '8px', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid rgba(239,68,68,.25)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', opacity: actionLoading === q.id + '-delete' ? 0.5 : 1 }}
+                                  >
+                                    {actionLoading === q.id + '-delete' ? <Loader2 style={{ width: '13px', height: '13px', animation: 'spin 1s linear infinite' }} /> : <Trash2 style={{ width: '13px', height: '13px' }} />}
+                                  </button>
                                 </div>
                               </div>
                             ))}

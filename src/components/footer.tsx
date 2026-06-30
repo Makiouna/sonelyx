@@ -44,9 +44,9 @@ export default function Footer() {
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '16px', marginTop: 'clamp(44px,5vw,68px)', paddingTop: '24px', borderTop: '1px solid rgba(0,0,0,.09)', fontSize: '13px' }}>
           <div>© 2026 Sonelyx. Tous droits réservés.</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '24px' }}>
-            <Link href="#" style={{ color: 'inherit', textDecoration: 'none' }}>Mentions légales</Link>
-            <Link href="#" style={{ color: 'inherit', textDecoration: 'none' }}>CGV</Link>
-            <Link href="#" style={{ color: 'inherit', textDecoration: 'none' }}>Confidentialité</Link>
+            <Link href="/mentions-legales" style={{ color: 'inherit', textDecoration: 'none' }}>Mentions légales</Link>
+            <Link href="/cgv" style={{ color: 'inherit', textDecoration: 'none' }}>CGV</Link>
+            <Link href="/confidentialite" style={{ color: 'inherit', textDecoration: 'none' }}>Confidentialité</Link>
           </div>
         </div>
       </div>

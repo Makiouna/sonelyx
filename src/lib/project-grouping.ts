@@ -46,6 +46,10 @@ export interface Quote {
   discount: number;
   previousVersion: string | null;
   clientRefusalNote: string | null;
+  // Deposit / caution fields
+  depositAmount: number | null;
+  depositStatus: 'PENDING' | 'AUTHORIZED' | 'CAPTURED' | 'RELEASED' | 'BYPASSED' | null;
+  stripePaymentIntentId: string | null;
   createdAt: string;
   updatedAt: string;
 }

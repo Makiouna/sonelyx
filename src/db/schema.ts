@@ -107,6 +107,11 @@ export const quote = pgTable('quote', {
   discount: doublePrecision('discount').default(0).notNull(), // global promo discount percentage
   previousVersion: text('previousVersion'), // JSON snapshot of quote state before admin modification
   clientRefusalNote: text('clientRefusalNote'), // client message when refusing admin modifications
+  // Deposit / caution fields (only relevant on docType = 'devis')
+  depositAmount: doublePrecision('deposit_amount'), // montant de la caution demandée (null = pas de caution)
+  depositStatus: text('deposit_status').$type<'PENDING' | 'AUTHORIZED' | 'CAPTURED' | 'RELEASED' | 'BYPASSED'>(), // null tant qu'aucune caution n'est définie
+  stripePaymentIntentId: text('stripe_payment_intent_id'), // PaymentIntent Stripe lié
+  depositReminderSentAt: timestamp('deposit_reminder_sent_at'), // date du dernier rappel J-3 envoyé
   createdAt: timestamp('createdAt').notNull(),
   updatedAt: timestamp('updatedAt').notNull(),
 });
