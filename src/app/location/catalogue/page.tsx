@@ -180,7 +180,7 @@ export default function LocationCatalogue() {
           <div style={{ marginBottom: '28px' }}>
             <h2 style={{ fontWeight: 800, fontSize: 'clamp(26px,3.6vw,40px)', lineHeight: 1.08, letterSpacing: '-.03em', margin: '0 0 8px' }}>Catalogue</h2>
             <div style={{ fontSize: '15px', color: '#6e6e73', fontWeight: 500 }}>
-              {loading ? 'Chargement en cours...' : `${filteredItems.length} références · page {currentPage} sur ${totalPages || 1}`}
+              {loading ? 'Chargement en cours...' : `${filteredItems.length} références · page ${currentPage} sur ${totalPages || 1}`}
             </div>
           </div>
 
