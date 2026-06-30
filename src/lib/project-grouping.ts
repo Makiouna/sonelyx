@@ -50,6 +50,10 @@ export interface Quote {
   depositAmount: number | null;
   depositStatus: 'PENDING' | 'AUTHORIZED' | 'CAPTURED' | 'RELEASED' | 'BYPASSED' | null;
   stripePaymentIntentId: string | null;
+  invoiceStripePaymentIntentId: string | null;
+  invoicePaymentStatus: 'PENDING' | 'SUCCEEDED' | 'FAILED' | null;
+  cancellationReason: string | null;
+  cancelledAt: string | null;
   createdAt: string;
   updatedAt: string;
 }

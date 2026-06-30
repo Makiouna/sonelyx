@@ -7,10 +7,11 @@ import { authClient } from '@/lib/auth-client';
 import Header from '@/components/header';
 import Footer from '@/components/footer';
 import DepositWidget from '@/components/deposit-widget';
+import PaymentRouter from '@/components/payment-router';
 import {
   Loader2, FileText, Trash2, Send, Calendar,
   AlertTriangle, ChevronDown, ChevronUp, Check, X,
-  ChevronLeft, PackageCheck, Receipt, RefreshCcw, FileSignature, Pencil,
+  ChevronLeft, PackageCheck, Receipt, RefreshCcw, FileSignature, Pencil, Ban, Phone,
 } from 'lucide-react';
 import {
   groupQuotesByProject, getProjectStatus, projectStatusLabel, projectStatusColors,
@@ -417,6 +418,7 @@ export default function ProjectPage({ params }: PageProps) {
 
         {cancelled.map(cq => {
           const isOpen = openDetailId === cq.id;
+          const hadDeposit = !!cq.depositAmount && cq.depositAmount > 0;
           return (
             <div key={cq.id} style={{ border: '1px solid rgba(239,68,68,.15)', borderRadius: 14, overflow: 'hidden', backgroundColor: '#fef2f2' }}>
               <div style={{ padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
@@ -435,6 +437,33 @@ export default function ProjectPage({ params }: PageProps) {
                   </button>
                 </div>
               </div>
+
+              {/* Cancellation notice — always visible */}
+              <div style={{ borderTop: '1px solid rgba(239,68,68,.12)', padding: '14px 16px', backgroundColor: '#fff5f5', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                  <Ban style={{ width: 15, height: 15, color: '#ef4444', flexShrink: 0, marginTop: 1 }} />
+                  <div style={{ fontSize: 13, color: '#b91c1c', fontWeight: 600, lineHeight: 1.55 }}>
+                    Cette location a été annulée.
+                    {hadDeposit && (
+                      <span style={{ fontWeight: 400, color: '#dc2626' }}>
+                        {' '}L'acompte de {cq.depositAmount!.toLocaleString('fr-FR')} € a été annulé et libéré.
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                  <Phone style={{ width: 14, height: 14, color: '#86868b', flexShrink: 0, marginTop: 1 }} />
+                  <p style={{ margin: 0, fontSize: 12, color: '#6e6e73', lineHeight: 1.65 }}>
+                    Pour toute question relative au paiement, merci de vous rapprocher directement du loueur.
+                  </p>
+                </div>
+                {cq.cancellationReason && (
+                  <div style={{ borderLeft: '2px solid rgba(239,68,68,.3)', paddingLeft: 10, fontSize: 11, color: '#86868b', fontStyle: 'italic' }}>
+                    Motif : "{cq.cancellationReason}"
+                  </div>
+                )}
+              </div>
+
               {isOpen && <DetailPanel q={cq} />}
             </div>
           );
@@ -559,24 +588,21 @@ export default function ProjectPage({ params }: PageProps) {
               </div>
               {dt === 'devis' ? <DevisSection docs={docs} /> : (
                 <>
-                  {dt === 'facture' && paymentSettings && (paymentSettings.iban || paymentSettings.bic) && (
-                    <div style={{ backgroundColor: '#e8f1fd', border: '1px solid rgba(0,113,227,.15)', borderRadius: 14, padding: '14px 18px', marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: '#0071e3', letterSpacing: '.04em', textTransform: 'uppercase' }}>Coordonnées de paiement</div>
-                      {paymentSettings.iban && (
-                        <div style={{ fontSize: 13, color: '#1d1d1f' }}>
-                          <span style={{ color: '#86868b', fontWeight: 600 }}>IBAN : </span>
-                          <span style={{ fontFamily: 'monospace', fontWeight: 700, letterSpacing: '.05em' }}>{paymentSettings.iban}</span>
+                  {dt === 'facture' && docs.some(q => q.status === 'validated') && (
+                    <div style={{ marginBottom: 16 }}>
+                      {docs.filter(q => q.status === 'validated').map(q => (
+                        <div key={`pay-${q.id}`} style={{ marginBottom: 12 }}>
+                          <PaymentRouter
+                            totalAmount={q.totalTTC}
+                            quoteId={q.id}
+                            iban={paymentSettings?.iban ?? ''}
+                            bic={paymentSettings?.bic ?? ''}
+                            paymentInstructions={paymentSettings?.instructions}
+                            initialPaymentStatus={q.invoicePaymentStatus}
+                            onSuccess={fetchQuotes}
+                          />
                         </div>
-                      )}
-                      {paymentSettings.bic && (
-                        <div style={{ fontSize: 13, color: '#1d1d1f' }}>
-                          <span style={{ color: '#86868b', fontWeight: 600 }}>BIC : </span>
-                          <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{paymentSettings.bic}</span>
-                        </div>
-                      )}
-                      {paymentSettings.instructions && (
-                        <div style={{ fontSize: 12, color: '#6e6e73', marginTop: 4, lineHeight: 1.5 }}>{paymentSettings.instructions}</div>
-                      )}
+                      ))}
                     </div>
                   )}
                   <SimpleDocSection docs={docs} />

@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import { auth } from '@/lib/auth';
 import { db } from '@/db';
-import { quote as quoteTable } from '@/db/schema';
+import { quote as quoteTable, user as userTable } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
+import { sendQuoteStatusUpdatedEmail } from '@/lib/email';
 
 export async function PUT(
   request: Request,
@@ -111,7 +112,44 @@ export async function PUT(
     if (discount !== undefined) updates.discount = Number(discount);
     if (projectName !== undefined) updates.projectName = projectName || null;
 
+    // Fetch client email/name if updated by admin
+    let clientEmail = '';
+    let clientName = '';
+    if (isAdmin) {
+      const clientUser = await db.select().from(userTable).where(eq(userTable.id, existing[0].userId)).limit(1);
+      if (clientUser[0]) {
+        clientEmail = clientUser[0].email;
+        clientName = clientUser[0].name;
+      }
+    }
+
     await db.update(quoteTable).set(updates).where(eq(quoteTable.id, id));
+
+    if (isAdmin && clientEmail) {
+      const isStatusChange = status !== undefined && ['modified_by_admin', 'pdf_pending', 'validated'].includes(status);
+      const isPriceChange = totalTTC !== undefined || discount !== undefined || items !== undefined;
+      
+      if (isStatusChange || isPriceChange) {
+        const finalStatus = status ?? existing[0].status;
+        const finalTotalTTC = totalTTC !== undefined ? Number(totalTTC) : existing[0].totalTTC;
+        const finalProjectName = projectName !== undefined ? (projectName || 'Mon Projet') : (existing[0].projectName || 'Mon Projet');
+        const finalPdfUrl = pdfUrl !== undefined ? pdfUrl : existing[0].pdfUrl;
+
+        try {
+          await sendQuoteStatusUpdatedEmail(
+            clientEmail,
+            clientName,
+            id,
+            finalProjectName,
+            finalStatus,
+            finalTotalTTC,
+            finalPdfUrl
+          );
+        } catch (e) {
+          console.error('Error sending quote status updated email:', e);
+        }
+      }
+    }
 
     return NextResponse.json({ success: true, message: 'Devis mis à jour avec succès.' });
   } catch (error: any) {

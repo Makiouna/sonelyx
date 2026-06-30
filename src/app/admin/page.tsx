@@ -10,7 +10,7 @@ import ScannerModal from '@/components/scanner-modal';
 import PackIcon from '@/components/pack-icon';
 import EquipmentIcon from '@/components/equipment-icon';
 import { useRemoteScanner } from '@/lib/remote-scanner-context';
-import { Loader2, Plus, Edit2, Trash2, Users, Sliders, DollarSign, TrendingUp, BarChart3, Info, ChevronLeft, Tag, FileText, CreditCard, Camera, QrCode, X } from 'lucide-react';
+import { Loader2, Plus, Edit2, Trash2, Users, Sliders, DollarSign, TrendingUp, BarChart3, Info, ChevronLeft, Tag, FileText, CreditCard, Camera, QrCode, X, Mail } from 'lucide-react';
 
 interface PackCompositionRow {
   id: string;
@@ -154,6 +154,13 @@ export default function AdminDashboard() {
   const [paymentError, setPaymentError] = useState('');
   const [paymentLoading, setPaymentLoading] = useState(false);
 
+  // Email settings
+  const [adminEmailCollectionText, setAdminEmailCollectionText] = useState('');
+  const [adminEmailReturnText, setAdminEmailReturnText] = useState('');
+  const [emailSettingsMessage, setEmailSettingsMessage] = useState('');
+  const [emailSettingsError, setEmailSettingsError] = useState('');
+  const [emailSettingsLoading, setEmailSettingsLoading] = useState(false);
+
   // Admin Quotes list states
   const [adminQuotes, setAdminQuotes] = useState<any[]>([]);
   const [loadingQuotes, setLoadingQuotes] = useState(true);
@@ -211,6 +218,8 @@ export default function AdminDashboard() {
         setAdminIban(data.iban || '');
         setAdminBic(data.bic || '');
         setAdminPaymentInstructions(data.paymentInstructions || '');
+        setAdminEmailCollectionText(data.emailCollectionText || '');
+        setAdminEmailReturnText(data.emailReturnText || '');
       }
     } catch (e) {
       console.error('Error fetching settings:', e);
@@ -272,6 +281,34 @@ export default function AdminDashboard() {
       setPaymentError(err.message || 'Une erreur est survenue.');
     } finally {
       setPaymentLoading(false);
+    }
+  };
+
+  const handleUpdateEmailSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setEmailSettingsMessage('');
+    setEmailSettingsError('');
+    setEmailSettingsLoading(true);
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          emailCollectionText: adminEmailCollectionText,
+          emailReturnText: adminEmailReturnText,
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setEmailSettingsMessage('Modèles d’e-mails mis à jour avec succès.');
+        fetchSettings();
+      } else {
+        setEmailSettingsError(data.error || 'Une erreur est survenue.');
+      }
+    } catch (err: any) {
+      setEmailSettingsError(err.message || 'Une erreur est survenue.');
+    } finally {
+      setEmailSettingsLoading(false);
     }
   };
 
@@ -1817,6 +1854,82 @@ export default function AdminDashboard() {
                   </div>
                   <button type="submit" disabled={paymentLoading} style={{ width: '100%', padding: '12px', borderRadius: '980px', backgroundColor: '#1d1d1f', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginTop: '6px' }}>
                     {paymentLoading ? <Loader2 style={{ width: '16px', height: '16px', animation: 'spin 1s linear infinite' }} /> : 'Enregistrer les coordonnées'}
+                  </button>
+                </form>
+              </div>
+
+              {/* Configuration des Emails Transactionnels */}
+              <div style={{ backgroundColor: '#ffffff', border: '1px solid rgba(0,0,0,.08)', borderRadius: '24px', padding: '30px', boxShadow: '0 4px 20px rgba(0,0,0,.02)' }}>
+                <h3 style={{ fontSize: '18px', fontWeight: 800, margin: '0 0 20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Mail style={{ width: '20px', height: '20px', color: '#0071e3' }} /> Configuration des Emails Transactionnels
+                </h3>
+                <form onSubmit={handleUpdateEmailSettings} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  {emailSettingsMessage && (
+                    <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #dcfce7', borderRadius: '12px', padding: '12px', fontSize: '13px', color: '#15803d', fontWeight: 500 }}>
+                      {emailSettingsMessage}
+                    </div>
+                  )}
+                  {emailSettingsError && (
+                    <div style={{ backgroundColor: '#fef2f2', border: '1px solid #fee2e2', borderRadius: '12px', padding: '12px', fontSize: '13px', color: '#ef4444', fontWeight: 500 }}>
+                      {emailSettingsError}
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '13px', fontWeight: 600 }}>Rappel avant Retrait du Matériel (J-1)</label>
+                    <textarea
+                      rows={6}
+                      placeholder="Modèle d'e-mail de retrait..."
+                      value={adminEmailCollectionText}
+                      onChange={e => setAdminEmailCollectionText(e.target.value)}
+                      style={{ padding: '12px 16px', borderRadius: '16px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '14px', fontFamily: 'inherit', resize: 'vertical' }}
+                      required
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '13px', fontWeight: 600 }}>Rappel avant Retour du Matériel (J-1 ou Jour J)</label>
+                    <textarea
+                      rows={6}
+                      placeholder="Modèle d'e-mail de retour..."
+                      value={adminEmailReturnText}
+                      onChange={e => setAdminEmailReturnText(e.target.value)}
+                      style={{ padding: '12px 16px', borderRadius: '16px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '14px', fontFamily: 'inherit', resize: 'vertical' }}
+                      required
+                    />
+                  </div>
+
+                  <div style={{ backgroundColor: '#f5f5f7', borderRadius: '16px', padding: '16px 20px', fontSize: '12px', color: '#6e6e73', lineHeight: 1.5 }}>
+                    <strong style={{ color: '#1d1d1f', display: 'block', marginBottom: '6px' }}>Variables dynamiques disponibles :</strong>
+                    <ul style={{ margin: 0, paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <li><code>{`{client_name}`}</code> : Nom complet du client</li>
+                      <li><code>{`{project_name}`}</code> : Nom du projet / événement</li>
+                      <li><code>{`{date}`}</code> : Date de retrait ou de retour (ex: lundi 14 juillet)</li>
+                      <li><code>{`{time}`}</code> : Heure conseillée ou limite (ex: 09:00 ou 18:00)</li>
+                    </ul>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={emailSettingsLoading}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      borderRadius: '980px',
+                      backgroundColor: '#1d1d1f',
+                      color: '#fff',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                      fontSize: '14px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      marginTop: '6px'
+                    }}
+                  >
+                    {emailSettingsLoading ? <Loader2 style={{ width: '16px', height: '16px', animation: 'spin 1s linear infinite' }} /> : 'Enregistrer les e-mails'}
                   </button>
                 </form>
               </div>

@@ -27,6 +27,13 @@ import {
   ShieldCheck,
   ShieldAlert,
   Euro,
+  CreditCard,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  Ban,
+  ExternalLink,
+  X,
 } from 'lucide-react';
 import { groupQuotesByProject, getProjectStatus, projectStatusLabel, projectStatusColors } from '@/lib/project-grouping';
 import ScannerModal from '@/components/scanner-modal';
@@ -78,6 +85,10 @@ interface Quote {
   depositAmount: number | null;
   depositStatus: 'PENDING' | 'AUTHORIZED' | 'CAPTURED' | 'RELEASED' | 'BYPASSED' | null;
   stripePaymentIntentId: string | null;
+  invoiceStripePaymentIntentId: string | null;
+  invoicePaymentStatus: 'PENDING' | 'SUCCEEDED' | 'FAILED' | null;
+  cancellationReason: string | null;
+  cancelledAt: string | null;
   createdAt: string;
   updatedAt: string;
   userName: string;
@@ -198,6 +209,11 @@ export default function ClientFolderPage({ params }: PageProps) {
 
   // Payment settings (IBAN/BIC for display under invoices)
   const [paymentSettings, setPaymentSettings] = useState<{ iban: string; bic: string; instructions: string } | null>(null);
+
+  // Cancellation modal state
+  const [cancellingQuoteId, setCancellingQuoteId] = useState<string | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelLoading, setCancelLoading] = useState(false);
 
   // Security check on load
   useEffect(() => {
@@ -426,6 +442,30 @@ export default function ClientFolderPage({ params }: PageProps) {
       alert('Erreur.');
     } finally {
       setActionLoading(null);
+    }
+  };
+
+  const handleCancelQuote = async () => {
+    if (!cancellingQuoteId) return;
+    setCancelLoading(true);
+    try {
+      const res = await fetch('/api/admin/quotes/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quoteId: cancellingQuoteId, reason: cancelReason }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setCancellingQuoteId(null);
+        setCancelReason('');
+        fetchClientData();
+      } else {
+        alert(data.error || 'Erreur lors de l\'annulation.');
+      }
+    } catch {
+      alert('Erreur réseau.');
+    } finally {
+      setCancelLoading(false);
     }
   };
 
@@ -1137,7 +1177,9 @@ export default function ClientFolderPage({ params }: PageProps) {
                                               {actionLoading === q.id ? <Loader2 style={{ width: '11px', height: '11px', animation: 'spin 1s linear infinite' }} /> : 'Valider'}
                                             </button>
                                             <button onClick={() => startEditing(q as unknown as Quote)} disabled={actionLoading === q.id} style={{ padding: '7px 12px', borderRadius: '980px', backgroundColor: '#f5f5f7', color: '#1d1d1f', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '12px' }}>Modifier</button>
-                                            <button onClick={() => handleUpdateStatus(q.id, 'cancelled')} disabled={actionLoading === q.id} style={{ padding: '7px 12px', borderRadius: '980px', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #ef4444', cursor: 'pointer', fontWeight: 600, fontSize: '12px' }}>Refuser</button>
+                                            <button onClick={() => { setCancellingQuoteId(q.id); setCancelReason(''); }} disabled={actionLoading === q.id} style={{ padding: '7px 12px', borderRadius: '980px', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #ef4444', cursor: 'pointer', fontWeight: 600, fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                              <Ban style={{ width: '11px', height: '11px' }} /> Refuser
+                                            </button>
                                           </>
                                         )}
                                         {q.status === 'modified_by_admin' && (
@@ -1149,7 +1191,9 @@ export default function ClientFolderPage({ params }: PageProps) {
                                               {actionLoading === q.id ? <Loader2 style={{ width: '11px', height: '11px', animation: 'spin 1s linear infinite' }} /> : 'Valider'}
                                             </button>
                                             <button onClick={() => startEditing(q as unknown as Quote)} disabled={actionLoading === q.id} style={{ padding: '7px 12px', borderRadius: '980px', backgroundColor: '#f5f5f7', color: '#1d1d1f', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '12px' }}>Modifier</button>
-                                            <button onClick={() => handleUpdateStatus(q.id, 'cancelled')} disabled={actionLoading === q.id} style={{ padding: '7px 12px', borderRadius: '980px', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #ef4444', cursor: 'pointer', fontWeight: 600, fontSize: '12px' }}>Annuler</button>
+                                            <button onClick={() => { setCancellingQuoteId(q.id); setCancelReason(''); }} disabled={actionLoading === q.id} style={{ padding: '7px 12px', borderRadius: '980px', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #ef4444', cursor: 'pointer', fontWeight: 600, fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                              <Ban style={{ width: '11px', height: '11px' }} /> Annuler
+                                            </button>
                                           </>
                                         )}
                                         {q.status === 'pdf_pending' && (
@@ -1173,14 +1217,22 @@ export default function ClientFolderPage({ params }: PageProps) {
                                               <button onClick={() => handleLockDevis(q.id)} disabled={actionLoading === q.id + '-lock'} style={{ padding: '7px 14px', borderRadius: '980px', backgroundColor: '#1db954', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                                                 {actionLoading === q.id + '-lock' ? <Loader2 style={{ width: '11px', height: '11px', animation: 'spin 1s linear infinite' }} /> : <Lock style={{ width: '11px', height: '11px' }} />} Règlement reçu
                                               </button>
+                                              <button onClick={() => { setCancellingQuoteId(q.id); setCancelReason(''); }} style={{ padding: '7px 12px', borderRadius: '980px', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid rgba(239,68,68,.4)', cursor: 'pointer', fontWeight: 600, fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                                <Ban style={{ width: '11px', height: '11px' }} /> Annuler la location
+                                              </button>
                                             </>
                                           );
                                         })()}
                                         {q.status === 'locked' && (
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '10px', backgroundColor: '#e2fbe8', border: '1px solid #bbf7d0' }}>
-                                            <Lock style={{ width: '11px', height: '11px', color: '#1db954' }} />
-                                            <span style={{ fontSize: '12px', fontWeight: 700, color: '#15803d' }}>Règlement confirmé — inventaire verrouillé</span>
-                                          </div>
+                                          <>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '10px', backgroundColor: '#e2fbe8', border: '1px solid #bbf7d0' }}>
+                                              <Lock style={{ width: '11px', height: '11px', color: '#1db954' }} />
+                                              <span style={{ fontSize: '12px', fontWeight: 700, color: '#15803d' }}>Règlement confirmé — inventaire verrouillé</span>
+                                            </div>
+                                            <button onClick={() => { setCancellingQuoteId(q.id); setCancelReason(''); }} style={{ padding: '7px 12px', borderRadius: '980px', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid rgba(239,68,68,.4)', cursor: 'pointer', fontWeight: 600, fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                              <Ban style={{ width: '11px', height: '11px' }} /> Annuler la location
+                                            </button>
+                                          </>
                                         )}
                                         <button
                                           title={`Supprimer ${q.docType === 'facture' ? 'la facture' : q.docType === 'avoir' ? "l'avoir" : 'le devis'}`}
@@ -1311,6 +1363,34 @@ export default function ClientFolderPage({ params }: PageProps) {
                                             Caution libérée — aucun prélèvement
                                           </div>
                                         )}
+                                        {q.stripePaymentIntentId && (
+                                          <a
+                                            href={`https://dashboard.stripe.com/payments/${q.stripePaymentIntentId}`}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: '#86868b', marginTop: '6px', textDecoration: 'none', fontFamily: 'monospace' }}
+                                          >
+                                            <ExternalLink style={{ width: '10px', height: '10px' }} />
+                                            {q.stripePaymentIntentId}
+                                          </a>
+                                        )}
+                                      </div>
+                                    )}
+
+                                    {/* ── Cancellation info (if cancelled) ── */}
+                                    {q.status === 'cancelled' && (
+                                      <div style={{ marginTop: '12px', padding: '12px 16px', borderRadius: '12px', backgroundColor: '#fef2f2', border: '1px solid rgba(239,68,68,.2)', display: 'flex', flexDirection: 'column' as const, gap: '4px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                                          <Ban style={{ width: '13px', height: '13px', color: '#ef4444' }} />
+                                          <span style={{ fontSize: '12px', fontWeight: 800, color: '#ef4444' }}>
+                                            Annulée{(q as any).cancelledAt ? ` le ${new Date((q as any).cancelledAt).toLocaleDateString('fr-FR')}` : ''}
+                                          </span>
+                                        </div>
+                                        {(q as any).cancellationReason && (
+                                          <p style={{ margin: 0, fontSize: '12px', color: '#6e6e73', lineHeight: 1.6, paddingLeft: '20px', fontStyle: 'italic' }}>
+                                            "{(q as any).cancellationReason}"
+                                          </p>
+                                        )}
                                       </div>
                                     )}
                                   </div>
@@ -1342,26 +1422,62 @@ export default function ClientFolderPage({ params }: PageProps) {
                                     <span style={{ marginLeft: '12px' }}>HT : <strong>{q.totalHT.toLocaleString('fr-FR')} €</strong></span>
                                     <span style={{ marginLeft: '8px' }}>TTC : <strong style={{ color: '#15803d' }}>{q.totalTTC.toLocaleString('fr-FR')} €</strong></span>
                                   </div>
-                                  {paymentSettings && (paymentSettings.iban || paymentSettings.bic) && (
-                                    <div style={{ backgroundColor: '#e8f1fd', border: '1px solid rgba(0,113,227,.15)', borderRadius: '10px', padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#0071e3', letterSpacing: '.04em', textTransform: 'uppercase' as const }}>Coordonnées de paiement envoyées au client</div>
-                                      {paymentSettings.iban && (
-                                        <div style={{ fontSize: '12px', color: '#1d1d1f' }}>
-                                          <span style={{ color: '#86868b', fontWeight: 600 }}>IBAN : </span>
-                                          <span style={{ fontFamily: 'monospace', fontWeight: 700, letterSpacing: '.04em' }}>{paymentSettings.iban}</span>
-                                        </div>
-                                      )}
-                                      {paymentSettings.bic && (
-                                        <div style={{ fontSize: '12px', color: '#1d1d1f' }}>
-                                          <span style={{ color: '#86868b', fontWeight: 600 }}>BIC : </span>
-                                          <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{paymentSettings.bic}</span>
-                                        </div>
-                                      )}
-                                      {paymentSettings.instructions && (
-                                        <div style={{ fontSize: '11px', color: '#6e6e73', marginTop: '2px', lineHeight: 1.5 }}>{paymentSettings.instructions}</div>
-                                      )}
+                                  {/* ── Activité de paiement ── */}
+                                  <div style={{ borderRadius: '12px', border: '1px solid rgba(0,0,0,.08)', overflow: 'hidden' }}>
+                                    <div style={{ padding: '9px 14px', backgroundColor: '#f5f5f7', borderBottom: '1px solid rgba(0,0,0,.06)', display: 'flex', alignItems: 'center', gap: '7px' }}>
+                                      <CreditCard style={{ width: '12px', height: '12px', color: '#3c3c43' }} />
+                                      <span style={{ fontSize: '10px', fontWeight: 700, color: '#3c3c43', textTransform: 'uppercase' as const, letterSpacing: '.06em' }}>Activité de paiement</span>
                                     </div>
-                                  )}
+
+                                    {q.invoiceStripePaymentIntentId ? (
+                                      <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                        {q.invoicePaymentStatus === 'SUCCEEDED'
+                                          ? <CheckCircle2 style={{ width: '16px', height: '16px', color: '#15803d', flexShrink: 0 }} />
+                                          : q.invoicePaymentStatus === 'FAILED'
+                                          ? <XCircle style={{ width: '16px', height: '16px', color: '#ef4444', flexShrink: 0 }} />
+                                          : <Clock style={{ width: '16px', height: '16px', color: '#d97706', flexShrink: 0 }} />
+                                        }
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                          <div style={{ fontSize: '12px', fontWeight: 700, color: q.invoicePaymentStatus === 'SUCCEEDED' ? '#15803d' : q.invoicePaymentStatus === 'FAILED' ? '#ef4444' : '#d97706' }}>
+                                            Carte / Stripe —{' '}
+                                            {q.invoicePaymentStatus === 'SUCCEEDED' ? 'Paiement réussi ✓' : q.invoicePaymentStatus === 'FAILED' ? 'Paiement échoué' : 'En cours / tentative'}
+                                          </div>
+                                          <div style={{ fontSize: '10px', color: '#86868b', marginTop: '2px', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
+                                            {q.invoiceStripePaymentIntentId}
+                                          </div>
+                                        </div>
+                                        <a
+                                          href={`https://dashboard.stripe.com/payments/${q.invoiceStripePaymentIntentId}`}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: '#0071e3', textDecoration: 'none', fontWeight: 700, whiteSpace: 'nowrap' as const, flexShrink: 0 }}
+                                        >
+                                          <ExternalLink style={{ width: '11px', height: '11px' }} /> Stripe
+                                        </a>
+                                      </div>
+                                    ) : (
+                                      <div style={{ padding: '10px 14px', fontSize: '12px', color: '#86868b', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: '7px' }}>
+                                        <Clock style={{ width: '13px', height: '13px', flexShrink: 0 }} />
+                                        Aucune tentative de paiement en ligne enregistrée.
+                                      </div>
+                                    )}
+
+                                    {/* Virement possible — remind admin of IBAN if amount > 1500 */}
+                                    {!q.invoiceStripePaymentIntentId && paymentSettings && (paymentSettings.iban || paymentSettings.bic) && (
+                                      <div style={{ padding: '8px 14px', borderTop: '1px solid rgba(0,0,0,.05)', backgroundColor: '#fafafa', display: 'flex', flexWrap: 'wrap' as const, gap: '12px' }}>
+                                        {paymentSettings.iban && (
+                                          <span style={{ fontSize: '11px', color: '#86868b' }}>
+                                            IBAN : <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#1d1d1f' }}>{paymentSettings.iban}</span>
+                                          </span>
+                                        )}
+                                        {paymentSettings.bic && (
+                                          <span style={{ fontSize: '11px', color: '#86868b' }}>
+                                            BIC : <span style={{ fontFamily: 'monospace', fontWeight: 700, color: '#1d1d1f' }}>{paymentSettings.bic}</span>
+                                          </span>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
                                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
                                     {q.pdfUrl && (
                                       <a href={`/api/quotes/${q.id}/pdf`} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '6px 12px', borderRadius: '980px', backgroundColor: '#e2fbe8', color: '#1db954', textDecoration: 'none', fontWeight: 700, fontSize: '12px' }}>
@@ -1431,6 +1547,93 @@ export default function ClientFolderPage({ params }: PageProps) {
         )}
 
       </main>
+
+      {/* ── Cancellation modal ──────────────────────────────────────────────── */}
+      {cancellingQuoteId && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            backgroundColor: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)',
+            padding: '20px',
+          }}
+          onClick={e => { if (e.target === e.currentTarget) { setCancellingQuoteId(null); setCancelReason(''); } }}
+        >
+          <div style={{
+            backgroundColor: '#fff', borderRadius: '20px',
+            padding: '28px', width: '100%', maxWidth: '480px',
+            boxShadow: '0 24px 60px rgba(0,0,0,0.2)',
+            fontFamily: 'var(--font-hanken-grotesk), -apple-system, sans-serif',
+          }}>
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 42, height: 42, borderRadius: 12, backgroundColor: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Ban style={{ width: 20, height: 20, color: '#ef4444' }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: '#1d1d1f' }}>Annuler la location</div>
+                  <div style={{ fontSize: 12, color: '#86868b', marginTop: 2 }}>#{cancellingQuoteId}</div>
+                </div>
+              </div>
+              <button
+                onClick={() => { setCancellingQuoteId(null); setCancelReason(''); }}
+                style={{ padding: 6, borderRadius: 8, border: '1px solid rgba(0,0,0,.1)', backgroundColor: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#86868b' }}
+              >
+                <X style={{ width: 16, height: 16 }} />
+              </button>
+            </div>
+
+            {/* Warning */}
+            <div style={{ padding: '12px 14px', borderRadius: 12, backgroundColor: '#fff3cd', border: '1px solid rgba(217,119,6,.25)', marginBottom: 20, fontSize: 13, color: '#92400e', lineHeight: 1.65 }}>
+              <strong>Attention :</strong> Cette action va annuler la location et libérer automatiquement tous les articles physiques associés (RENTED → AVAILABLE). Si une caution est autorisée, elle sera également annulée.
+            </div>
+
+            {/* Reason textarea */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
+              <label style={{ fontSize: 12, fontWeight: 700, color: '#1d1d1f' }}>
+                Motif d'annulation <span style={{ color: '#86868b', fontWeight: 400 }}>(optionnel mais recommandé)</span>
+              </label>
+              <textarea
+                value={cancelReason}
+                onChange={e => setCancelReason(e.target.value)}
+                placeholder="Ex : Annulation client pour force majeure — événement reporté au..."
+                rows={4}
+                style={{
+                  padding: '12px 14px', borderRadius: 12,
+                  border: '1px solid rgba(0,0,0,.15)', outline: 'none',
+                  fontSize: 13, color: '#1d1d1f',
+                  fontFamily: 'inherit', resize: 'vertical',
+                  lineHeight: 1.6,
+                }}
+              />
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => { setCancellingQuoteId(null); setCancelReason(''); }}
+                disabled={cancelLoading}
+                style={{ padding: '10px 18px', borderRadius: 980, backgroundColor: '#f5f5f7', color: '#1d1d1f', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 13, fontFamily: 'inherit' }}
+              >
+                Fermer
+              </button>
+              <button
+                onClick={handleCancelQuote}
+                disabled={cancelLoading}
+                style={{ padding: '10px 20px', borderRadius: 980, backgroundColor: cancelLoading ? '#86868b' : '#ef4444', color: '#fff', border: 'none', cursor: cancelLoading ? 'default' : 'pointer', fontWeight: 700, fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 7, fontFamily: 'inherit', transition: 'background 0.2s' }}
+              >
+                {cancelLoading
+                  ? <><Loader2 style={{ width: 14, height: 14, animation: 'spin 1s linear infinite' }} /> Annulation…</>
+                  : <><Ban style={{ width: 14, height: 14 }} /> Confirmer l'annulation</>
+                }
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Logistics Scanner Modal */}
       <ScannerModal

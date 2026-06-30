@@ -5,6 +5,7 @@ import { db } from '@/db';
 import { quote as quoteTable, setting as settingTable } from '@/db/schema';
 import { getEquipmentWithQuantity } from '@/db/queries';
 import { eq, desc } from 'drizzle-orm';
+import { sendQuoteConfirmationEmail } from '@/lib/email';
 
 // GET: Returns the logged-in user's quotes
 export async function GET() {
@@ -49,7 +50,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { status, startDate, endDate, notes, cart } = body;
+    const { status, startDate, endDate, notes, cart, projectName } = body;
 
     // Validate request inputs
     if (!status || !startDate || !endDate || !cart || typeof cart !== 'object') {
@@ -181,9 +182,26 @@ export async function POST(request: Request) {
       items: JSON.stringify(snapshotItems),
       totalHT,
       totalTTC,
+      projectName: projectName || null,
       createdAt: new Date(),
       updatedAt: new Date(),
     });
+
+    if (status === 'pending') {
+      try {
+        await sendQuoteConfirmationEmail(
+          session.user.email,
+          session.user.name,
+          quoteId,
+          projectName || 'Mon Projet',
+          totalTTC,
+          startDate,
+          endDate
+        );
+      } catch (e) {
+        console.error('Error sending quote confirmation email:', e);
+      }
+    }
 
     return NextResponse.json({
       success: true,

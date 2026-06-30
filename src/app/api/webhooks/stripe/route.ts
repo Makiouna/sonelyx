@@ -24,10 +24,38 @@ export async function POST(request: Request) {
 
   const paymentIntent = event.data.object as Stripe.PaymentIntent;
   const quoteId = paymentIntent.metadata?.quoteId;
-  if (!quoteId || paymentIntent.metadata?.type !== 'deposit') {
+  const intentType = paymentIntent.metadata?.type;
+
+  if (!quoteId || (intentType !== 'deposit' && intentType !== 'invoice')) {
     return NextResponse.json({ received: true });
   }
 
+  // ── Invoice payment events ───────────────────────────────────────────────
+  if (intentType === 'invoice') {
+    switch (event.type) {
+      case 'payment_intent.succeeded': {
+        await db
+          .update(quoteTable)
+          .set({ invoicePaymentStatus: 'SUCCEEDED', updatedAt: new Date() })
+          .where(eq(quoteTable.id, quoteId));
+        break;
+      }
+      case 'payment_intent.payment_failed': {
+        await db
+          .update(quoteTable)
+          .set({
+            invoicePaymentStatus: 'FAILED',
+            invoiceStripePaymentIntentId: null,
+            updatedAt: new Date(),
+          })
+          .where(eq(quoteTable.id, quoteId));
+        break;
+      }
+    }
+    return NextResponse.json({ received: true });
+  }
+
+  // ── Deposit events ────────────────────────────────────────────────────────
   switch (event.type) {
     case 'payment_intent.amount_capturable_updated': {
       // Funds are blocked — mark deposit as AUTHORIZED

@@ -46,6 +46,25 @@ export default function UserProfile() {
 
   useEffect(() => { if (session) fetchQuotes(); }, [session]);
 
+  // Handle Stripe 3DS redirect return: /profil?payment=success&quoteId=xxx
+  useEffect(() => {
+    if (!session) return;
+    const params = new URLSearchParams(window.location.search);
+    const quoteId = params.get('quoteId');
+    if (params.get('payment') === 'success' && quoteId) {
+      fetch('/api/payments/confirm-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quoteId }),
+      })
+        .catch(() => {})
+        .finally(() => {
+          fetchQuotes();
+          window.history.replaceState({}, '', '/profil');
+        });
+    }
+  }, [session]);
+
   const handlePasswordChange = async (e: React.SyntheticEvent) => {
     e.preventDefault();
     setPasswordError('');

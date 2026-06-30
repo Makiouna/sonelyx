@@ -2,6 +2,7 @@ import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from '@better-auth/drizzle-adapter';
 import { db } from '@/db';
 import * as schema from '@/db/schema';
+import { sendWelcomeEmail } from './email';
 
 // Only set baseURL if explicitly configured — avoids http://localhost:3000 fallback
 // in production which would cause wrong cookie names/Secure attributes.
@@ -31,6 +32,19 @@ export const auth = betterAuth({
         type: 'string',
         required: false,
         defaultValue: 'user',
+      },
+    },
+  },
+  databaseHooks: {
+    user: {
+      create: {
+        after: async (user) => {
+          try {
+            await sendWelcomeEmail(user.email, user.name);
+          } catch (e) {
+            console.error('Error sending welcome email:', e);
+          }
+        },
       },
     },
   },

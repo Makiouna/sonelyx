@@ -112,6 +112,13 @@ export const quote = pgTable('quote', {
   depositStatus: text('deposit_status').$type<'PENDING' | 'AUTHORIZED' | 'CAPTURED' | 'RELEASED' | 'BYPASSED'>(), // null tant qu'aucune caution n'est définie
   stripePaymentIntentId: text('stripe_payment_intent_id'), // PaymentIntent Stripe lié
   depositReminderSentAt: timestamp('deposit_reminder_sent_at'), // date du dernier rappel J-3 envoyé
+  invoiceStripePaymentIntentId: text('invoice_stripe_payment_intent_id'),
+  invoicePaymentStatus: text('invoice_payment_status').$type<'PENDING' | 'SUCCEEDED' | 'FAILED'>(),
+  cancellationReason: text('cancellation_reason'),
+  cancelledAt: timestamp('cancelled_at'),
+  cartReminderSentAt: timestamp('cart_reminder_sent_at'),
+  pickupReminderSentAt: timestamp('pickup_reminder_sent_at'),
+  returnReminderSentAt: timestamp('return_reminder_sent_at'),
   createdAt: timestamp('createdAt').notNull(),
   updatedAt: timestamp('updatedAt').notNull(),
 });
@@ -139,4 +146,11 @@ export const packCompositions = pgTable('pack_compositions', {
     .notNull()
     .references(() => equipment.id, { onDelete: 'cascade' }),
   quantityNeeded: integer('quantity_needed').notNull().default(1),
+});
+
+export const systemSettings = pgTable('system_settings', {
+  id: text('id').primaryKey(), // 'default'
+  emailCollectionText: text('email_collection_text').notNull(),
+  emailReturnText: text('email_return_text').notNull(),
+  updatedAt: timestamp('updatedAt').notNull(),
 });
