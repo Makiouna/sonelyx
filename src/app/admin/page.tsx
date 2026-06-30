@@ -23,6 +23,7 @@ interface EquipmentItem {
   priceTax: 'HT' | 'TTC';
   purchasePrice: number;
   quantity: number;
+  unassignedQrCount: number;
   image: string | null;
 }
 
@@ -67,6 +68,7 @@ export default function AdminDashboard() {
   const [loadingCategories, setLoadingCategories] = useState(true);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [catalogFilter, setCatalogFilter] = useState<'all' | 'no_quantity' | 'no_qr'>('all');
   const [catalogPage, setCatalogPage] = useState(1);
   const [catalogPageSize, setCatalogPageSize] = useState(25);
 
@@ -935,16 +937,18 @@ export default function AdminDashboard() {
     ? Math.round((equipment.reduce((sum, item) => sum + item.price, 0) / equipment.length)) 
     : 0;
 
-  // Filtered equipment list based on search query
+  // Filtered equipment list based on search query and active filter
   const filteredEquipment = equipment.filter(item => {
     const q = searchQuery.toLowerCase().trim();
-    if (!q) return true;
-    return (
+    if (q && !(
       item.name.toLowerCase().includes(q) ||
       item.brand.toLowerCase().includes(q) ||
       item.desc.toLowerCase().includes(q) ||
       item.id.toLowerCase().includes(q)
-    );
+    )) return false;
+    if (catalogFilter === 'no_quantity') return item.quantity === 0;
+    if (catalogFilter === 'no_qr') return item.unassignedQrCount > 0;
+    return true;
   });
 
   const catalogTotalPages = Math.max(1, Math.ceil(filteredEquipment.length / catalogPageSize));
@@ -1140,7 +1144,44 @@ export default function AdminDashboard() {
                 {/* Catalogue Listing */}
                 <div style={{ backgroundColor: '#ffffff', border: '1px solid rgba(0,0,0,.08)', borderRadius: '24px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,.02)' }}>
                   <div style={{ padding: '24px 30px', borderBottom: '1px solid rgba(0,0,0,.06)', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
-                    <h3 style={{ fontSize: '18px', fontWeight: 800, margin: 0 }}>Catalogue de Location</h3>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                      <h3 style={{ fontSize: '18px', fontWeight: 800, margin: 0 }}>Catalogue de Location</h3>
+                      {/* Quick filters */}
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        {([
+                          { key: 'all', label: 'Tout', color: '#1d1d1f', bg: '#1d1d1f' },
+                          { key: 'no_quantity', label: `Sans stock (${equipment.filter(e => e.quantity === 0).length})`, color: '#ef4444', bg: '#fef2f2' },
+                          { key: 'no_qr', label: `QR manquant (${equipment.filter(e => e.unassignedQrCount > 0).length})`, color: '#f59e0b', bg: '#fffbeb' },
+                        ] as const).map(f => (
+                          <button
+                            key={f.key}
+                            type="button"
+                            onClick={() => { setCatalogFilter(f.key); setCatalogPage(1); }}
+                            style={{
+                              padding: '5px 14px',
+                              borderRadius: '980px',
+                              border: catalogFilter === f.key
+                                ? `1px solid ${f.key === 'all' ? '#1d1d1f' : f.color}`
+                                : '1px solid rgba(0,0,0,.12)',
+                              backgroundColor: catalogFilter === f.key
+                                ? (f.key === 'all' ? '#1d1d1f' : f.bg)
+                                : '#ffffff',
+                              color: catalogFilter === f.key
+                                ? (f.key === 'all' ? '#ffffff' : f.color)
+                                : '#86868b',
+                              fontSize: '12px',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              fontFamily: 'inherit',
+                              transition: 'all .15s',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {f.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                       <input
                         type="text"
@@ -1265,7 +1306,21 @@ export default function AdminDashboard() {
                                     </span>
                                   </td>
                                   <td style={{ padding: '18px 30px', fontWeight: 600 }}>
-                                    {item.quantity}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                      <span style={{ color: item.quantity === 0 ? '#ef4444' : 'inherit' }}>
+                                        {item.quantity}
+                                      </span>
+                                      {item.quantity > 0 && item.unassignedQrCount > 0 && (
+                                        <span title={`${item.unassignedQrCount} exemplaire(s) sans QR`} style={{ fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '980px', color: '#d97706', backgroundColor: '#fef3c7', whiteSpace: 'nowrap' }}>
+                                          {item.unassignedQrCount} sans QR
+                                        </span>
+                                      )}
+                                      {item.quantity === 0 && (
+                                        <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: '980px', color: '#ef4444', backgroundColor: '#fef2f2' }}>
+                                          Vide
+                                        </span>
+                                      )}
+                                    </div>
                                   </td>
                                   <td style={{ padding: '18px 30px', fontWeight: 700 }}>
                                     {isRequest ? (

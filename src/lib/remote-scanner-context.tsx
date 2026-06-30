@@ -125,6 +125,9 @@ function ScanToast({ toast }: { toast: ScanToastState }) {
   );
 }
 
+const POLL_INTERVAL_MS = 400;
+const PENDING_SCAN_TTL_MS = 3000;
+
 export function RemoteScannerProvider({ children }: { children: ReactNode }) {
   const { data: session } = authClient.useSession();
   const consumers = useRef<ScanConsumer[]>([]);
@@ -132,6 +135,8 @@ export function RemoteScannerProvider({ children }: { children: ReactNode }) {
   const [toast, setToast] = useState<ScanToastState>({ visible: false, code: '', status: 'success', message: '' });
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Scan saved locally when no consumer is ready yet — retried for up to 3s
+  const pendingScanRef = useRef<{ qrCodeId: string; expiresAt: number } | null>(null);
 
   const isAdmin = !!(session && (session.user as any).role === 'admin');
 
@@ -153,35 +158,56 @@ export function RemoteScannerProvider({ children }: { children: ReactNode }) {
     consumers.current = consumers.current.filter(c => c.id !== id);
   }, []);
 
+  const dispatchScan = useCallback(async (qrCodeId: string) => {
+    const consumer = consumers.current[0];
+    if (!consumer) {
+      // No consumer yet — buffer locally and retry for up to 3s
+      if (!pendingScanRef.current) {
+        pendingScanRef.current = { qrCodeId, expiresAt: Date.now() + PENDING_SCAN_TTL_MS };
+      }
+      return;
+    }
+    pendingScanRef.current = null;
+    try {
+      await consumer.handler(qrCodeId);
+      playSuccessBeep();
+      showToast(qrCodeId, 'success', `Code ${qrCodeId} traité`);
+    } catch (e: any) {
+      playErrorBeep();
+      showToast(qrCodeId, 'error', e?.message || `Erreur sur le code ${qrCodeId}`);
+    }
+  }, [showToast]);
+
   const pollForScans = useCallback(async () => {
+    // Priority 1: flush a buffered scan that had no consumer when it arrived
+    const pending = pendingScanRef.current;
+    if (pending) {
+      if (Date.now() > pending.expiresAt) {
+        // Expired after 3s — give up and show error
+        pendingScanRef.current = null;
+        showToast(pending.qrCodeId, 'error', `Code ${pending.qrCodeId} — aucun contexte actif`);
+        playErrorBeep();
+      } else {
+        const consumer = consumers.current[0];
+        if (consumer) {
+          await dispatchScan(pending.qrCodeId);
+        }
+        // Still no consumer? Keep pending and try next poll
+      }
+      return; // Don't also fetch from API in the same tick
+    }
+
+    // Priority 2: fetch next scan from API
     try {
       const res = await fetch('/api/remote-scan');
       if (!res.ok) return;
       const data = await res.json();
-
       if (!data.success || !data.scan) return;
-
-      const { qrCodeId } = data.scan;
-      const consumer = consumers.current[0];
-
-      if (!consumer) {
-        showToast(qrCodeId, 'error', `Code ${qrCodeId} — aucun contexte actif`);
-        playErrorBeep();
-        return;
-      }
-
-      try {
-        await consumer.handler(qrCodeId);
-        playSuccessBeep();
-        showToast(qrCodeId, 'success', `Code ${qrCodeId} traité`);
-      } catch (e: any) {
-        playErrorBeep();
-        showToast(qrCodeId, 'error', e?.message || `Erreur sur le code ${qrCodeId}`);
-      }
+      await dispatchScan(data.scan.qrCodeId);
     } catch (_) {
       // Network error — ignore silently
     }
-  }, [showToast]);
+  }, [showToast, dispatchScan]);
 
   useEffect(() => {
     if (!isAdmin) {
@@ -191,7 +217,7 @@ export function RemoteScannerProvider({ children }: { children: ReactNode }) {
     }
 
     setIsPolling(true);
-    intervalRef.current = setInterval(pollForScans, 1500);
+    intervalRef.current = setInterval(pollForScans, POLL_INTERVAL_MS);
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);

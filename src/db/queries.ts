@@ -8,15 +8,16 @@ import { equipment, productItems } from './schema';
  * Active quantity counts all items whose status is not 'MAINTENANCE'.
  */
 export async function getEquipmentWithQuantity() {
-  const activeCountSubquery = db
+  const itemStatsSubquery = db
     .select({
       productId: productItems.productId,
       count: sql<number>`count(*)::integer`.as('count'),
+      unassignedQrCount: sql<number>`count(CASE WHEN ${productItems.qrCodeId} IS NULL THEN 1 END)::integer`.as('unassigned_qr_count'),
     })
     .from(productItems)
     .where(sql`${productItems.status} != 'MAINTENANCE'`)
     .groupBy(productItems.productId)
-    .as('active_counts');
+    .as('item_stats');
 
   const result = await db
     .select({
@@ -32,10 +33,11 @@ export async function getEquipmentWithQuantity() {
       priceTax: equipment.priceTax,
       purchasePrice: equipment.purchasePrice,
       image: equipment.image,
-      quantity: sql<number>`COALESCE(${activeCountSubquery.count}, 0)`.mapWith(Number),
+      quantity: sql<number>`COALESCE(${itemStatsSubquery.count}, 0)`.mapWith(Number),
+      unassignedQrCount: sql<number>`COALESCE(${itemStatsSubquery.unassignedQrCount}, 0)`.mapWith(Number),
     })
     .from(equipment)
-    .leftJoin(activeCountSubquery, eq(equipment.id, activeCountSubquery.productId));
+    .leftJoin(itemStatsSubquery, eq(equipment.id, itemStatsSubquery.productId));
 
   return result;
 }
