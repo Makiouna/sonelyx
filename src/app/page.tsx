@@ -9,6 +9,7 @@ import { Loader2 } from 'lucide-react';
 
 interface EquipmentItem {
   id: string;
+  slug: string;
   cat: string;
   catLabel: string;
   brand: string;
@@ -327,7 +328,7 @@ export default function Home() {
                   <div key={e.id} style={{ display: 'flex', flexDirection: 'column', backgroundColor: '#fff', borderRadius: '22px', overflow: 'hidden', border: '1px solid rgba(0,0,0,.09)', transition: 'transform .4s cubic-bezier(.22,1,.36,1), box-shadow .4s, border-color .4s' }}>
                     <div style={{ position: 'relative', aspectRatio: '4/3', backgroundColor: '#f5f5f7', overflow: 'hidden' }}>
                       {e.image ? (
-                        <img src={e.image} alt={e.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                        <img src={e.image} alt={`Location ${e.name} Orléans - Événementiel`} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                       ) : (
                         <>
                           <div style={{ position: 'absolute', inset: 0, backgroundImage: 'repeating-linear-gradient(135deg, rgba(0,0,0,.028) 0 1px, transparent 1px 16px)' }}></div>
@@ -359,7 +360,7 @@ export default function Home() {
                           </span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <Link href={`/location/catalogue/${e.id}`} style={{ fontSize: '14px', fontWeight: 600, color: '#0071e3', textDecoration: 'none' }}>
+                          <Link href={`/location/catalogue/${e.slug}`} style={{ fontSize: '14px', fontWeight: 600, color: '#0071e3', textDecoration: 'none' }}>
                             Fiche tech.
                           </Link>
                           <button

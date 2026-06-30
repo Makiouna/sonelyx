@@ -121,7 +121,7 @@ export async function PUT(
 
     // 2. Parse request body
     const body = await request.json();
-    const { name, brand, cat, desc, specs, price, priceType, priceTax, purchasePrice, image } = body;
+    const { name, brand, cat, desc, specs, price, priceType, priceTax, purchasePrice, image, isPack } = body;
 
     // 3. Find if item exists with quantity
     const existing = await getEquipmentItemWithQuantity(id);
@@ -154,6 +154,7 @@ export async function PUT(
         priceTax: priceTax !== undefined ? priceTax : existing[0].priceTax,
         purchasePrice: purchasePrice !== undefined ? Number(purchasePrice) : existing[0].purchasePrice,
         image: image !== undefined ? image : existing[0].image,
+        isPack: isPack !== undefined ? !!isPack : existing[0].isPack,
       })
       .where(eq(equipmentTable.id, id));
 

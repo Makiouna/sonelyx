@@ -18,6 +18,7 @@ export const category = pgTable('category', {
 
 export const equipment = pgTable('equipment', {
   id: text('id').primaryKey(),
+  slug: text('slug').unique(),
   cat: text('cat').notNull(),
   catLabel: text('catLabel').notNull(),
   brand: text('brand').notNull(),
@@ -29,6 +30,7 @@ export const equipment = pgTable('equipment', {
   priceTax: text('priceTax').default('HT').notNull(), // 'HT' | 'TTC'
   purchasePrice: doublePrecision('purchasePrice').default(0).notNull(),
   image: text('image'),
+  isPack: boolean('is_pack').default(false).notNull(),
 });
 
 export const productItems = pgTable('product_items', {
@@ -121,4 +123,15 @@ export const remoteScanQueue = pgTable('remote_scan_queue', {
   adminId: text('admin_id').notNull(),
   qrCodeId: text('qr_code_id').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const packCompositions = pgTable('pack_compositions', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  packProductId: text('pack_product_id')
+    .notNull()
+    .references(() => equipment.id, { onDelete: 'cascade' }),
+  componentProductId: text('component_product_id')
+    .notNull()
+    .references(() => equipment.id, { onDelete: 'cascade' }),
+  quantityNeeded: integer('quantity_needed').notNull().default(1),
 });

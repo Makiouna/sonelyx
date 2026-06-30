@@ -4,10 +4,13 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Header from '@/components/header';
 import Footer from '@/components/footer';
+import PackIcon from '@/components/pack-icon';
+import EquipmentIcon from '@/components/equipment-icon';
 import { Loader2 } from 'lucide-react';
 
 interface EquipmentItem {
   id: string;
+  slug: string;
   cat: string;
   catLabel: string;
   brand: string;
@@ -19,6 +22,7 @@ interface EquipmentItem {
   priceTax: 'HT' | 'TTC';
   image: string | null;
   quantity: number;
+  isPack: boolean;
 }
 
 interface CategoryItem {
@@ -269,25 +273,29 @@ export default function LocationCatalogue() {
                       }}
                     >
                       {/* Product Header Visual area */}
-                      <Link href={`/location/catalogue/${item.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                      <Link href={`/location/catalogue/${item.slug}`} style={{ textDecoration: 'none', color: 'inherit' }}>
                         <div style={{ position: 'relative', aspectRatio: '4/3', backgroundColor: '#ffffff', overflow: 'hidden' }}>
                           {item.image ? (
-                            <img src={item.image} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                            <img src={item.image} alt={`Location ${item.name} Orléans - Événementiel`} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                          ) : item.isPack ? (
+                            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
+                              <PackIcon size={80} />
+                              <span style={{ fontSize: '11px', fontWeight: 700, color: '#6366f1', letterSpacing: '.08em', textTransform: 'uppercase' }}>Pack / Kit</span>
+                            </div>
                           ) : (
-                            <div style={{ position: 'absolute', inset: 0, backgroundImage: 'repeating-linear-gradient(135deg, rgba(0,0,0,.02) 0 1px, transparent 1px 16px)' }}></div>
+                            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <EquipmentIcon cat={item.cat} size={80} />
+                            </div>
                           )}
                           <span style={{ position: 'absolute', top: '16px', left: '16px', padding: '6px 12px', borderRadius: '980px', backgroundColor: 'rgba(255,255,255,.9)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', fontSize: '12px', fontWeight: 700, color: '#1d1d1f' }}>
                             {item.brand}
-                          </span>
-                          <span style={{ position: 'absolute', top: '16px', right: '16px', padding: '6px 12px', borderRadius: '980px', backgroundColor: 'rgba(255,255,255,.9)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', fontSize: '11px', fontWeight: 700, color: '#10b981' }}>
-                            Dispo: {item.quantity}
                           </span>
                         </div>
                       </Link>
 
                       {/* Product Details */}
-                      <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', flex: 1 }}>
-                        <Link href={`/location/catalogue/${item.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                      <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', flex: 1, backgroundColor: '#f9f9fb' }}>
+                        <Link href={`/location/catalogue/${item.slug}`} style={{ textDecoration: 'none', color: 'inherit' }}>
                           <div>
                             <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '.06em', color: '#86868b', marginBottom: '8px' }}>
                               {categories.find(c => c.id === item.cat)?.label || item.catLabel}
@@ -341,7 +349,7 @@ export default function LocationCatalogue() {
               {totalPages > 1 && (
                 <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', marginTop: '54px' }}>
                   <button
-                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                    onClick={() => { setCurrentPage(prev => Math.max(prev - 1, 1)); document.getElementById('catalogue')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}
                     disabled={currentPage === 1}
                     style={{
                       padding: '10px 20px',
@@ -363,7 +371,7 @@ export default function LocationCatalogue() {
                   </div>
 
                   <button
-                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                    onClick={() => { setCurrentPage(prev => Math.min(prev + 1, totalPages)); document.getElementById('catalogue')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}
                     disabled={currentPage === totalPages}
                     style={{
                       padding: '10px 20px',

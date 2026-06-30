@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import { auth } from '@/lib/auth';
 import { db } from '@/db';
-import { equipment as equipmentTable, productItems as productItemsTable, setting as settingTable } from '@/db/schema';
+import { equipment as equipmentTable, productItems as productItemsTable, setting as settingTable, packCompositions } from '@/db/schema';
 import { getEquipmentWithQuantity, syncProductItems } from '@/db/queries';
 import { eq } from 'drizzle-orm';
 import { CATALOGUE } from '@/lib/catalogue-data';
@@ -17,7 +17,7 @@ export async function GET() {
       console.log('Database equipment table is empty. Seeding default items...');
       
       // Default prices and quantities for seeding
-      const seededCatalogue = CATALOGUE.map((item, idx) => {
+      const seededCatalogue = CATALOGUE.map((item) => {
         // Base rental prices on gear types
         let price = 50;
         let purchasePrice = 1200;
@@ -87,10 +87,34 @@ export async function GET() {
     });
     const isAdmin = session?.user && (session.user as any).role === 'admin';
 
+    // 3.5 Compute pack quantities from component stock
+    const componentQtyMap: Record<string, number> = {};
+    for (const item of items) {
+      if (!item.isPack) componentQtyMap[item.id] = item.quantity;
+    }
+
+    const allCompositions = await db.select().from(packCompositions);
+    const packCompMap: Record<string, Array<{ componentId: string; quantityNeeded: number }>> = {};
+    for (const row of allCompositions) {
+      if (!packCompMap[row.packProductId]) packCompMap[row.packProductId] = [];
+      packCompMap[row.packProductId].push({ componentId: row.componentProductId, quantityNeeded: row.quantityNeeded });
+    }
+
     // 4. Return items (sanitize purchasePrice if not admin)
     const sanitizedItems = items.map((item) => {
       const parsedSpecs = JSON.parse(item.specs);
-      
+
+      // For packs: quantity = min(floor(componentStock / quantityNeeded))
+      let effectiveQuantity = item.quantity;
+      if (item.isPack) {
+        const comps = packCompMap[item.id];
+        if (!comps || comps.length === 0) {
+          effectiveQuantity = 0;
+        } else {
+          effectiveQuantity = Math.min(...comps.map(c => Math.floor((componentQtyMap[c.componentId] ?? 0) / c.quantityNeeded)));
+        }
+      }
+
       let priceHT = item.price;
       let priceTTC = item.price;
 
@@ -102,18 +126,23 @@ export async function GET() {
         }
       }
 
+      const slug = item.slug ?? `location-${item.id}-orleans`;
+
       if (isAdmin) {
         return {
           ...item,
+          slug,
+          quantity: effectiveQuantity,
           priceHT,
           priceTTC,
           specs: parsedSpecs,
         };
       } else {
-        // Exclude purchasePrice from public outputs
         const { purchasePrice, ...publicItem } = item;
         return {
           ...publicItem,
+          slug,
+          quantity: effectiveQuantity,
           priceHT,
           priceTTC,
           specs: parsedSpecs,
@@ -140,14 +169,15 @@ export async function POST(request: Request) {
 
     // 2. Parse request body
     const body = await request.json();
-    const { name, brand, cat, desc, specs, price, priceType, priceTax, purchasePrice, items, image } = body;
+    const { name, brand, cat, desc, specs, price, priceType, priceTax, purchasePrice, items, image, isPack, compositions } = body;
 
     if (!name || !brand || !cat || !desc || !specs) {
       return NextResponse.json({ success: false, error: 'Champs obligatoires manquants.' }, { status: 400 });
     }
 
-    // 3. Generate id / slug
+    // 3. Generate id + SEO slug
     const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    const slug = `location-${id}-orleans`;
 
     // Check if ID already exists
     const existing = await db.select().from(equipmentTable).where(eq(equipmentTable.id, id)).limit(1);
@@ -168,6 +198,7 @@ export async function POST(request: Request) {
     // 4. Insert into database
     await db.insert(equipmentTable).values({
       id,
+      slug,
       cat,
       catLabel,
       brand,
@@ -179,19 +210,34 @@ export async function POST(request: Request) {
       priceTax: priceTax || 'HT',
       purchasePrice: Number(purchasePrice) || 0,
       image: image || null,
+      isPack: !!isPack,
     });
 
-    // 5. Create product items (with optional QR codes)
-    const itemsArray: { qrCodeId?: string | null }[] = Array.isArray(items) ? items : [];
-    if (itemsArray.length > 0) {
-      await db.insert(productItemsTable).values(
-        itemsArray.map((item, i) => ({
-          productId: id,
-          itemName: `${name} ${i + 1}`,
-          qrCodeId: item.qrCodeId || null,
-          status: 'AVAILABLE' as const,
-        }))
-      );
+    if (isPack) {
+      // 5a. Pack: insert compositions (no physical items)
+      const compsArray: Array<{ componentProductId: string; quantityNeeded: number }> = Array.isArray(compositions) ? compositions : [];
+      if (compsArray.length > 0) {
+        await db.insert(packCompositions).values(
+          compsArray.map(c => ({
+            packProductId: id,
+            componentProductId: c.componentProductId,
+            quantityNeeded: Math.max(1, c.quantityNeeded),
+          }))
+        );
+      }
+    } else {
+      // 5b. Regular product: create physical items with optional QR codes
+      const itemsArray: { qrCodeId?: string | null }[] = Array.isArray(items) ? items : [];
+      if (itemsArray.length > 0) {
+        await db.insert(productItemsTable).values(
+          itemsArray.map((item, i) => ({
+            productId: id,
+            itemName: `${name} ${i + 1}`,
+            qrCodeId: item.qrCodeId || null,
+            status: 'AVAILABLE' as const,
+          }))
+        );
+      }
     }
 
     return NextResponse.json({ success: true, message: 'Équipement ajouté au catalogue.' });

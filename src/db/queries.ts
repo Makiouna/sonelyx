@@ -22,6 +22,7 @@ export async function getEquipmentWithQuantity() {
   const result = await db
     .select({
       id: equipment.id,
+      slug: equipment.slug,
       cat: equipment.cat,
       catLabel: equipment.catLabel,
       brand: equipment.brand,
@@ -35,6 +36,7 @@ export async function getEquipmentWithQuantity() {
       image: equipment.image,
       quantity: sql<number>`COALESCE(${itemStatsSubquery.count}, 0)`.mapWith(Number),
       unassignedQrCount: sql<number>`COALESCE(${itemStatsSubquery.unassignedQrCount}, 0)`.mapWith(Number),
+      isPack: equipment.isPack,
     })
     .from(equipment)
     .leftJoin(itemStatsSubquery, eq(equipment.id, itemStatsSubquery.productId));
@@ -59,6 +61,7 @@ export async function getEquipmentItemWithQuantity(id: string) {
   const result = await db
     .select({
       id: equipment.id,
+      slug: equipment.slug,
       cat: equipment.cat,
       catLabel: equipment.catLabel,
       brand: equipment.brand,
@@ -71,6 +74,7 @@ export async function getEquipmentItemWithQuantity(id: string) {
       purchasePrice: equipment.purchasePrice,
       image: equipment.image,
       quantity: sql<number>`COALESCE(${activeCountSubquery.count}, 0)`.mapWith(Number),
+      isPack: equipment.isPack,
     })
     .from(equipment)
     .leftJoin(activeCountSubquery, eq(equipment.id, activeCountSubquery.productId))
@@ -161,4 +165,43 @@ export async function syncProductItems(productId: string, targetQuantity: number
       );
     }
   }
+}
+
+/**
+ * Fetches a single equipment item by its SEO slug (e.g. "location-kara-ii-orleans").
+ */
+export async function getEquipmentBySlug(slug: string) {
+  const activeCountSubquery = db
+    .select({
+      productId: productItems.productId,
+      count: sql<number>`count(*)::integer`.as('count'),
+    })
+    .from(productItems)
+    .where(sql`${productItems.status} != 'MAINTENANCE'`)
+    .groupBy(productItems.productId)
+    .as('active_counts');
+
+  const result = await db
+    .select({
+      id: equipment.id,
+      slug: equipment.slug,
+      cat: equipment.cat,
+      catLabel: equipment.catLabel,
+      brand: equipment.brand,
+      name: equipment.name,
+      desc: equipment.desc,
+      specs: equipment.specs,
+      price: equipment.price,
+      priceType: equipment.priceType,
+      priceTax: equipment.priceTax,
+      image: equipment.image,
+      quantity: sql<number>`COALESCE(${activeCountSubquery.count}, 0)`.mapWith(Number),
+      isPack: equipment.isPack,
+    })
+    .from(equipment)
+    .leftJoin(activeCountSubquery, eq(equipment.id, activeCountSubquery.productId))
+    .where(eq(equipment.slug, slug))
+    .limit(1);
+
+  return result[0] ?? null;
 }

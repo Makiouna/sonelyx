@@ -1,13 +1,14 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import Header from '@/components/header';
 import Footer from '@/components/footer';
-import { Loader2 } from 'lucide-react';
 
 interface EquipmentItem {
   id: string;
+  slug: string;
   cat: string;
   catLabel: string;
   brand: string;
@@ -19,108 +20,55 @@ interface EquipmentItem {
   priceTax: 'HT' | 'TTC';
   image: string | null;
   quantity: number;
+  isPack: boolean;
 }
 
-export default function ProductDetail({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
-  const [catalogue, setCatalogue] = useState<EquipmentItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState<Record<string, boolean>>({});
+interface Props {
+  item: EquipmentItem;
+  similarItems: EquipmentItem[];
+}
 
-  useEffect(() => {
-    async function loadData() {
-      try {
-        const res = await fetch('/api/equipment');
-        const data = await res.json();
-        if (data.success) {
-          setCatalogue(data.items);
-        }
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadData();
-  }, []);
+export default function ProductDetailClient({ item, similarItems }: Props) {
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     try {
       const stored = localStorage.getItem('sonelyx_devis');
-      if (stored) {
-        setSelected(JSON.parse(stored));
-      }
-    } catch (e) {
-      console.error(e);
-    }
+      if (stored) setSelected(JSON.parse(stored));
+    } catch {/* ignore */}
   }, []);
 
   const persist = (next: Record<string, boolean>) => {
     try {
       localStorage.setItem('sonelyx_devis', JSON.stringify(next));
       window.dispatchEvent(new Event('cart-updated'));
-    } catch (e) {
-      console.error(e);
-    }
+    } catch {/* ignore */}
   };
 
   const toggleSelect = (itemId: string) => {
     const next = { ...selected };
-    if (next[itemId]) {
-      delete next[itemId];
-    } else {
-      next[itemId] = true;
-    }
+    if (next[itemId]) delete next[itemId];
+    else next[itemId] = true;
     setSelected(next);
     persist(next);
   };
 
-  const item = catalogue.find(x => x.id === id);
-  const isAdded = item ? !!selected[item.id] : false;
+  const isAdded = !!selected[item.id];
   const count = Object.keys(selected).length;
   const selectionLabel = `${count} article${count > 1 ? 's' : ''} sélectionné${count > 1 ? 's' : ''}`;
-
-  // Get similar products (same category, excluding current product)
-  const similarProducts = item 
-    ? catalogue.filter(x => x.cat === item.cat && x.id !== item.id).slice(0, 3) 
-    : [];
+  const isRequest = item.priceType === 'on_request';
+  const altText = `Location ${item.name} Orléans - Événementiel`;
 
   const detailLinks = [
     { label: 'Espace Location', href: '/location/catalogue' },
     { label: 'Accueil', href: '/' },
   ];
 
-  if (loading) {
-    return (
-      <div style={{ backgroundColor: '#ffffff', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-hanken-grotesk), sans-serif' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
-          <Loader2 style={{ width: '32px', height: '32px', color: '#1d1d1f', animation: 'spin 1s linear infinite' }} />
-          <span style={{ fontSize: '15px', fontWeight: 600, color: '#6e6e73' }}>Chargement de l'équipement...</span>
-        </div>
-      </div>
-    );
-  }
-
-  if (!item) {
-    return (
-      <div style={{ backgroundColor: '#ffffff', color: '#1d1d1f', fontFamily: 'var(--font-hanken-grotesk), sans-serif', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-        <h1 style={{ fontSize: '32px', fontWeight: 800, marginBottom: '16px' }}>Produit introuvable</h1>
-        <p style={{ color: '#6e6e73', marginBottom: '24px' }}>Le matériel que vous recherchez n'existe pas ou a été déplacé.</p>
-        <Link href="/location/catalogue" style={{ display: 'inline-flex', padding: '12px 26px', borderRadius: '980px', backgroundColor: '#1d1d1f', color: '#fff', textDecoration: 'none', fontWeight: 600, fontSize: '15px' }}>
-          Retourner au catalogue
-        </Link>
-      </div>
-    );
-  }
-
-  const isRequest = item.priceType === 'on_request';
-
   return (
     <div style={{ backgroundColor: '#ffffff', color: '#1d1d1f', fontFamily: 'var(--font-hanken-grotesk), sans-serif', WebkitFontSmoothing: 'antialiased', letterSpacing: '-.01em', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      
+
       <Header subTitle="Location" links={detailLinks} />
 
-      {/* ===== PRODUCT DETAILS ===== */}
       <main style={{ flex: 1, maxWidth: '1180px', margin: '0 auto', width: '100%', padding: '40px clamp(20px, 4vw, 40px)' }}>
         <div style={{ marginBottom: '32px' }}>
           <Link href="/location/catalogue" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#0071e3', textDecoration: 'none', fontSize: '15px', fontWeight: 600 }}>
@@ -129,11 +77,18 @@ export default function ProductDetail({ params }: { params: Promise<{ id: string
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '48px', alignItems: 'start' }}>
-          
+
           {/* Left Column: Visual */}
           <div style={{ position: 'relative', borderRadius: '24px', overflow: 'hidden', aspectRatio: '4/3', backgroundColor: '#f5f5f7', border: '1px solid rgba(0,0,0,.08)' }}>
             {item.image ? (
-              <img src={item.image} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+              <Image
+                src={item.image}
+                alt={altText}
+                fill
+                style={{ objectFit: 'contain' }}
+                sizes="(max-width: 768px) 100vw, 50vw"
+                priority
+              />
             ) : (
               <>
                 <div style={{ position: 'absolute', inset: 0, backgroundImage: 'repeating-linear-gradient(135deg, rgba(0,0,0,.025) 0 1px, transparent 1px 16px)' }}></div>
@@ -142,7 +97,9 @@ export default function ProductDetail({ params }: { params: Promise<{ id: string
               </>
             )}
             <div style={{ position: 'absolute', top: '20px', left: '20px', padding: '6px 14px', borderRadius: '980px', backgroundColor: 'rgba(255,255,255,.9)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', fontSize: '13px', fontWeight: 700 }}>{item.brand}</div>
-            <span style={{ position: 'absolute', top: '20px', right: '20px', display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '980px', backgroundColor: 'rgba(255,255,255,.9)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', fontSize: '12px', fontWeight: 600, color: '#1d7a3e' }}><span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#1db954' }}></span>Disponible</span>
+            <span style={{ position: 'absolute', top: '20px', right: '20px', display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '980px', backgroundColor: 'rgba(255,255,255,.9)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', fontSize: '12px', fontWeight: 600, color: '#1d7a3e' }}>
+              <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#1db954' }}></span>Disponible à Orléans
+            </span>
           </div>
 
           {/* Right Column: Info */}
@@ -153,8 +110,7 @@ export default function ProductDetail({ params }: { params: Promise<{ id: string
               <p style={{ fontSize: '17px', lineHeight: 1.6, color: '#6e6e73', margin: 0 }}>{item.desc}</p>
             </div>
 
-            {/* Technical Specifications */}
-            {item.specs && item.specs.length > 0 && (
+            {item.specs.length > 0 && (
               <div style={{ backgroundColor: '#f5f5f7', borderRadius: '18px', padding: '24px' }}>
                 <h2 style={{ fontSize: '15px', fontWeight: 700, marginBottom: '14px', color: '#1d1d1f' }}>Caractéristiques techniques</h2>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
@@ -165,34 +121,20 @@ export default function ProductDetail({ params }: { params: Promise<{ id: string
               </div>
             )}
 
-            {/* Actions */}
             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '16px', paddingTop: '16px', borderTop: '1px solid rgba(0,0,0,.08)' }}>
               <button
                 onClick={() => toggleSelect(item.id)}
-                style={{
-                  flex: '1 1 200px',
-                  padding: '16px 32px',
-                  borderRadius: '980px',
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontFamily: 'inherit',
-                  fontSize: '16px',
-                  fontWeight: 600,
-                  transition: 'all .25s',
-                  backgroundColor: isAdded ? '#e8f1fd' : '#1d1d1f',
-                  color: isAdded ? '#0071e3' : '#fff',
-                  boxShadow: '0 4px 12px rgba(0,0,0,.05)'
-                }}
+                style={{ flex: '1 1 200px', padding: '16px 32px', borderRadius: '980px', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '16px', fontWeight: 600, transition: 'all .25s', backgroundColor: isAdded ? '#e8f1fd' : '#1d1d1f', color: isAdded ? '#0071e3' : '#fff', boxShadow: '0 4px 12px rgba(0,0,0,.05)' }}
               >
                 {isAdded ? '✓ Retirer de ma sélection' : '+ Ajouter au devis'}
               </button>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                <span style={{ fontSize: '13px', fontWeight: 600, color: '#86868b' }}>Tarif de location</span>
+                <span style={{ fontSize: '13px', fontWeight: 600, color: '#86868b' }}>Tarif de location / jour</span>
                 <span style={{ fontSize: '18px', fontWeight: 800, color: '#1d1d1f' }}>
                   {isRequest ? (
                     <span style={{ color: '#0071e3' }}>Sur devis</span>
                   ) : (
-                    <span>{item.price} € <span style={{ fontSize: '12px', fontWeight: 500, color: '#86868b' }}>{item.priceTax || 'HT'} / jour</span></span>
+                    <span>{item.price} € <span style={{ fontSize: '12px', fontWeight: 500, color: '#86868b' }}>{item.priceTax || 'HT'}</span></span>
                   )}
                 </span>
               </div>
@@ -200,20 +142,21 @@ export default function ProductDetail({ params }: { params: Promise<{ id: string
           </div>
         </div>
 
-        {/* ===== PRODUITS SIMILAIRES ===== */}
-        {similarProducts.length > 0 && (
+        {/* Similar products */}
+        {similarItems.length > 0 && (
           <section style={{ marginTop: '80px', paddingTop: '48px', borderTop: '1px solid rgba(0,0,0,.08)' }}>
             <h2 style={{ fontSize: '24px', fontWeight: 800, letterSpacing: '-.02em', marginBottom: '28px' }}>Matériel similaire</h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '24px' }}>
-              {similarProducts.map((p) => {
+              {similarItems.map((p) => {
                 const added = !!selected[p.id];
                 const itemRequest = p.priceType === 'on_request';
+                const pAlt = `Location ${p.name} Orléans - Événementiel`;
                 return (
                   <div key={p.id} style={{ display: 'flex', flexDirection: 'column', backgroundColor: '#fff', borderRadius: '22px', overflow: 'hidden', border: `1px solid ${added ? 'rgba(0,113,227,.5)' : 'rgba(0,0,0,.09)'}`, transition: 'transform .4s cubic-bezier(.22,1,.36,1), box-shadow .4s, border-color .3s' }}>
-                    <Link href={`/location/catalogue/${p.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                    <Link href={`/location/catalogue/${p.slug}`} style={{ textDecoration: 'none', color: 'inherit' }}>
                       <div style={{ position: 'relative', aspectRatio: '4/3', backgroundColor: '#f5f5f7', overflow: 'hidden' }}>
                         {p.image ? (
-                          <img src={p.image} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                          <Image src={p.image} alt={pAlt} fill style={{ objectFit: 'contain' }} sizes="280px" />
                         ) : (
                           <div style={{ position: 'absolute', inset: 0, backgroundImage: 'repeating-linear-gradient(135deg, rgba(0,0,0,.028) 0 1px, transparent 1px 16px)' }}></div>
                         )}
@@ -221,7 +164,7 @@ export default function ProductDetail({ params }: { params: Promise<{ id: string
                       </div>
                     </Link>
                     <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px', flex: 1 }}>
-                      <Link href={`/location/catalogue/${p.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                      <Link href={`/location/catalogue/${p.slug}`} style={{ textDecoration: 'none', color: 'inherit' }}>
                         <div>
                           <div style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '.08em', color: '#86868b', marginBottom: '6px' }}>{p.catLabel}</div>
                           <h3 style={{ fontWeight: 700, fontSize: '18px', letterSpacing: '-.02em', margin: '0 0 4px' }}>{p.name}</h3>
@@ -233,20 +176,7 @@ export default function ProductDetail({ params }: { params: Promise<{ id: string
                       </Link>
                       <button
                         onClick={() => toggleSelect(p.id)}
-                        style={{
-                          marginTop: 'auto',
-                          width: '100%',
-                          padding: '10px',
-                          borderRadius: '980px',
-                          border: 'none',
-                          cursor: 'pointer',
-                          fontFamily: 'inherit',
-                          fontSize: '13px',
-                          fontWeight: 600,
-                          transition: 'all .2s',
-                          backgroundColor: added ? '#e8f1fd' : '#1d1d1f',
-                          color: added ? '#0071e3' : '#fff'
-                        }}
+                        style={{ marginTop: 'auto', width: '100%', padding: '10px', borderRadius: '980px', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: '13px', fontWeight: 600, transition: 'all .2s', backgroundColor: added ? '#e8f1fd' : '#1d1d1f', color: added ? '#0071e3' : '#fff' }}
                       >
                         {added ? '✓ Ajouté' : '+ Ajouter'}
                       </button>
@@ -259,7 +189,7 @@ export default function ProductDetail({ params }: { params: Promise<{ id: string
         )}
       </main>
 
-      {/* ===== FLOATING QUOTE BAR ===== */}
+      {/* Floating quote bar */}
       {count > 0 && (
         <div style={{ position: 'fixed', left: '50%', bottom: '24px', transform: 'translateX(-50%)', zIndex: 70, display: 'flex', alignItems: 'center', gap: '16px', padding: '11px 11px 11px 22px', borderRadius: '980px', backgroundColor: 'rgba(29,29,31,.92)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', boxShadow: '0 20px 54px -18px rgba(0,0,0,.6)', color: '#fff', maxWidth: 'calc(100vw - 32px)', animation: 'barUp .35s cubic-bezier(.22,1,.36,1)' }}>
           <span style={{ fontSize: '14px', fontWeight: 600, whiteSpace: 'nowrap' }}>{selectionLabel}</span>

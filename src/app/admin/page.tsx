@@ -7,8 +7,20 @@ import { authClient } from '@/lib/auth-client';
 import Header from '@/components/header';
 import Footer from '@/components/footer';
 import ScannerModal from '@/components/scanner-modal';
+import PackIcon from '@/components/pack-icon';
+import EquipmentIcon from '@/components/equipment-icon';
 import { useRemoteScanner } from '@/lib/remote-scanner-context';
 import { Loader2, Plus, Edit2, Trash2, Users, Sliders, DollarSign, TrendingUp, BarChart3, Info, ChevronLeft, Tag, FileText, CreditCard, Camera, QrCode, X } from 'lucide-react';
+
+interface PackCompositionRow {
+  id: string;
+  componentProductId: string;
+  componentName: string;
+  componentBrand: string;
+  componentCatLabel: string;
+  componentImage: string | null;
+  quantityNeeded: number;
+}
 
 interface EquipmentItem {
   id: string;
@@ -24,6 +36,7 @@ interface EquipmentItem {
   purchasePrice: number;
   quantity: number;
   unassignedQrCount: number;
+  isPack: boolean;
   image: string | null;
 }
 
@@ -107,6 +120,17 @@ export default function AdminDashboard() {
   const [newItemsQrCodes, setNewItemsQrCodes] = useState<Record<number, string>>({});
   const [scanningNewItemIndex, setScanningNewItemIndex] = useState<number | null>(null);
   const [assigningQrToItemId, setAssigningQrToItemId] = useState<string | null>(null);
+
+  // Pack states (shared between create and edit)
+  const [isPack, setIsPack] = useState(false);
+  // Create form: draft compositions before saving
+  const [newPackCompositions, setNewPackCompositions] = useState<Array<{ componentProductId: string; quantityNeeded: number }>>([]);
+  // Edit form: saved compositions fetched from API
+  const [packCompositionRows, setPackCompositionRows] = useState<PackCompositionRow[]>([]);
+  const [packCompLoading, setPackCompLoading] = useState(false);
+  // Draft component being added (shared)
+  const [draftCompId, setDraftCompId] = useState('');
+  const [draftCompQty, setDraftCompQty] = useState(1);
   const [image, setImage] = useState('');
   const [formError, setFormError] = useState('');
   const [formLoading, setFormLoading] = useState(false);
@@ -599,6 +623,10 @@ export default function AdminDashboard() {
     setNewItemsQrCodes({});
     setScanningNewItemIndex(null);
     setImage('');
+    setIsPack(false);
+    setNewPackCompositions([]);
+    setDraftCompId('');
+    setDraftCompQty(1);
     setFormError('');
     setView('add');
   };
@@ -616,8 +644,22 @@ export default function AdminDashboard() {
     setPrice(String(item.price));
     setPurchasePrice(String(item.purchasePrice));
     setImage(item.image || '');
+    setIsPack(!!item.isPack);
+    setPackCompositionRows([]);
+    setDraftCompId('');
+    setDraftCompQty(1);
     setFormError('');
     setView('edit');
+  };
+
+  const fetchPackCompositions = async (productId: string) => {
+    setPackCompLoading(true);
+    try {
+      const res = await fetch(`/api/equipment/${productId}/compositions`);
+      const data = await res.json();
+      if (data.success) setPackCompositionRows(data.compositions);
+    } catch (e) { console.error(e); }
+    finally { setPackCompLoading(false); }
   };
 
   const fetchPhysicalItems = async (productId: string) => {
@@ -637,7 +679,11 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     if (view === 'edit' && editingItem) {
-      fetchPhysicalItems(editingItem.id);
+      if (editingItem.isPack) {
+        fetchPackCompositions(editingItem.id);
+      } else {
+        fetchPhysicalItems(editingItem.id);
+      }
     }
   }, [view, editingItem]);
 
@@ -785,7 +831,9 @@ export default function AdminDashboard() {
           priceTax,
           price: priceType === 'numeric' ? Number(price) : 0,
           purchasePrice: Number(purchasePrice) || 0,
-          items: Array.from({ length: newItemsCount }, (_, i) => ({
+          isPack,
+          compositions: isPack ? newPackCompositions : undefined,
+          items: isPack ? undefined : Array.from({ length: newItemsCount }, (_, i) => ({
             qrCodeId: newItemsQrCodes[i] || null,
           })),
           image: image || null,
@@ -830,16 +878,27 @@ export default function AdminDashboard() {
           priceTax,
           price: priceType === 'numeric' ? Number(price) : 0,
           purchasePrice: Number(purchasePrice) || 0,
+          isPack,
           image: image || null,
         })
       });
       const data = await res.json();
-      if (data.success) {
-        showListView();
-        fetchEquipment();
-      } else {
+      if (!data.success) {
         setFormError(data.error || 'Une erreur est survenue.');
+        return;
       }
+
+      // If it's a pack, also save compositions
+      if (isPack) {
+        await fetch(`/api/equipment/${editingItem.id}/compositions`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ compositions: packCompositionRows.map(r => ({ componentProductId: r.componentProductId, quantityNeeded: r.quantityNeeded })) }),
+        });
+      }
+
+      showListView();
+      fetchEquipment();
     } catch (err: any) {
       setFormError(err.message || 'Une erreur est survenue.');
     } finally {
@@ -1291,11 +1350,20 @@ export default function AdminDashboard() {
                                 <tr key={item.id} style={{ borderBottom: idx < paginatedEquipment.length - 1 ? '1px solid rgba(0,0,0,.04)' : 'none' }}>
                                   <td style={{ padding: '18px 30px' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                      {item.image && (
-                                        <img src={item.image} alt={item.name} style={{ width: '36px', height: '36px', borderRadius: '8px', objectFit: 'cover', border: '1px solid rgba(0,0,0,.06)' }} />
+                                      {item.image ? (
+                                        <img src={item.image} alt={item.name} style={{ width: '36px', height: '36px', borderRadius: '8px', objectFit: 'cover', border: '1px solid rgba(0,0,0,.06)', flexShrink: 0 }} />
+                                      ) : item.isPack ? (
+                                        <PackIcon size={36} style={{ borderRadius: '8px', flexShrink: 0 }} />
+                                      ) : (
+                                        <EquipmentIcon cat={item.cat} size={36} style={{ borderRadius: '8px', flexShrink: 0 }} />
                                       )}
                                       <div>
-                                        <div style={{ fontWeight: 700 }}>{item.name}</div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                          <span style={{ fontWeight: 700 }}>{item.name}</span>
+                                          {item.isPack && (
+                                            <span style={{ fontSize: '10px', fontWeight: 800, padding: '1px 7px', borderRadius: '980px', backgroundColor: '#ede9fe', color: '#6366f1', letterSpacing: '.04em' }}>PACK</span>
+                                          )}
+                                        </div>
                                         <div style={{ fontSize: '11px', color: '#86868b', marginTop: '2px' }}>{item.brand}</div>
                                       </div>
                                     </div>
@@ -2232,76 +2300,159 @@ export default function AdminDashboard() {
                   </div>
                 </div>
 
-                  {/* Exemplaires physiques */}
-                  <div style={{ borderTop: '1px solid rgba(0,0,0,.06)', paddingTop: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <h4 style={{ fontSize: '16px', fontWeight: 700, margin: 0 }}>Exemplaires Physiques</h4>
-                        <p style={{ fontSize: '12px', color: '#86868b', margin: '4px 0 0' }}>Chaque exemplaire ajouté compte pour 1 unité. Les QR Codes pourront être assignés après la création.</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setNewItemsCount(c => c + 1)}
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '8px 16px', borderRadius: '980px', backgroundColor: '#1d1d1f', color: '#ffffff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '13px' }}
+                  {/* Toggle Pack */}
+                  <div style={{ borderTop: '1px solid rgba(0,0,0,.06)', paddingTop: '20px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer', userSelect: 'none' }}>
+                      <div
+                        onClick={() => { setIsPack(p => !p); setNewPackCompositions([]); setNewItemsCount(0); setDraftCompId(''); setDraftCompQty(1); }}
+                        style={{ width: '44px', height: '24px', borderRadius: '980px', backgroundColor: isPack ? '#0071e3' : '#d1d1d6', position: 'relative', transition: 'background .2s', flexShrink: 0, cursor: 'pointer' }}
                       >
-                        <Plus style={{ width: '14px', height: '14px' }} />
-                        Ajouter un exemplaire
-                      </button>
-                    </div>
-
-                    {newItemsCount === 0 ? (
-                      <div style={{ padding: '24px', borderRadius: '18px', border: '1px dashed rgba(0,0,0,.15)', textAlign: 'center', color: '#86868b', fontSize: '14px' }}>
-                        Aucun exemplaire ajouté. Cliquez sur le bouton pour en ajouter.
+                        <div style={{ position: 'absolute', top: '3px', left: isPack ? '23px' : '3px', width: '18px', height: '18px', borderRadius: '50%', backgroundColor: '#fff', transition: 'left .2s', boxShadow: '0 1px 3px rgba(0,0,0,.25)' }} />
                       </div>
-                    ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                        {Array.from({ length: newItemsCount }, (_, i) => (
-                          <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', borderRadius: '16px', backgroundColor: '#f5f5f7', border: '1px solid rgba(0,0,0,.04)' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                              <span style={{ fontWeight: 600, fontSize: '14px' }}>{name || 'Nouveau produit'} {i + 1}</span>
-                              {newItemsQrCodes[i] ? (
-                                <span style={{ fontSize: '12px', fontFamily: 'monospace', padding: '4px 10px', borderRadius: '980px', backgroundColor: 'rgba(52,199,89,.12)', color: '#1a8a3a', fontWeight: 600 }}>
-                                  QR: {newItemsQrCodes[i]}
-                                </span>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => { setScanningNewItemIndex(i); setIsLocalScannerOpen(true); }}
-                                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '4px 12px', borderRadius: '980px', backgroundColor: 'rgba(255,149,0,.1)', color: '#e08000', fontWeight: 600, border: '1px solid rgba(255,149,0,.3)', cursor: 'pointer' }}
-                                >
-                                  <Camera style={{ width: '12px', height: '12px' }} />
-                                  Scanner QR
-                                </button>
-                              )}
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              {newItemsQrCodes[i] && (
-                                <button
-                                  type="button"
-                                  onClick={() => setNewItemsQrCodes(prev => { const n = { ...prev }; delete n[i]; return n; })}
-                                  style={{ fontSize: '12px', padding: '4px 10px', borderRadius: '980px', backgroundColor: 'transparent', color: '#86868b', border: '1px solid rgba(0,0,0,.12)', cursor: 'pointer' }}
-                                >
-                                  Changer QR
-                                </button>
-                              )}
-                              {i === newItemsCount - 1 && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setNewItemsCount(c => c - 1);
-                                    setNewItemsQrCodes(prev => { const n = { ...prev }; delete n[newItemsCount - 1]; return n; });
-                                  }}
-                                  style={{ padding: '6px 14px', borderRadius: '980px', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #fee2e2', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
-                                >
-                                  Retirer
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        ))}
+                      <div>
+                        <div style={{ fontSize: '14px', fontWeight: 700 }}>Ce produit est un Pack / Kit</div>
+                        <div style={{ fontSize: '12px', color: '#86868b', marginTop: '2px' }}>Un pack est composé de plusieurs produits existants. Il n'a pas d'exemplaires physiques propres.</div>
                       </div>
-                    )}
+                    </label>
                   </div>
+
+                  {isPack ? (
+                    /* Composition builder */
+                    <div style={{ borderTop: '1px solid rgba(0,0,0,.06)', paddingTop: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                      <div>
+                        <h4 style={{ fontSize: '16px', fontWeight: 700, margin: 0 }}>Composition du Pack</h4>
+                        <p style={{ fontSize: '12px', color: '#86868b', margin: '4px 0 0' }}>Définissez quels produits composent ce pack et en quelle quantité.</p>
+                      </div>
+                      {/* Add component row */}
+                      <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                        <select
+                          value={draftCompId}
+                          onChange={e => setDraftCompId(e.target.value)}
+                          style={{ flex: 1, minWidth: '200px', padding: '10px 16px', borderRadius: '980px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '13px', backgroundColor: '#fff' }}
+                        >
+                          <option value="">— Choisir un produit —</option>
+                          {equipment.filter(e => !e.isPack).map(e => (
+                            <option key={e.id} value={e.id}>{e.name} ({e.brand})</option>
+                          ))}
+                        </select>
+                        <input
+                          type="number" min={1} value={draftCompQty}
+                          onChange={e => setDraftCompQty(Math.max(1, Number(e.target.value)))}
+                          style={{ width: '80px', padding: '10px 14px', borderRadius: '980px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '13px', textAlign: 'center' }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!draftCompId) return;
+                            if (newPackCompositions.some(c => c.componentProductId === draftCompId)) return;
+                            setNewPackCompositions(prev => [...prev, { componentProductId: draftCompId, quantityNeeded: draftCompQty }]);
+                            setDraftCompId(''); setDraftCompQty(1);
+                          }}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '10px 18px', borderRadius: '980px', backgroundColor: '#1d1d1f', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '13px', whiteSpace: 'nowrap' }}
+                        >
+                          <Plus style={{ width: '14px', height: '14px' }} /> Ajouter
+                        </button>
+                      </div>
+                      {/* Composition list */}
+                      {newPackCompositions.length === 0 ? (
+                        <div style={{ padding: '24px', borderRadius: '18px', border: '1px dashed rgba(0,0,0,.15)', textAlign: 'center', color: '#86868b', fontSize: '14px' }}>
+                          Aucun composant. Ajoutez des produits ci-dessus.
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          {newPackCompositions.map((comp, idx) => {
+                            const compEq = equipment.find(e => e.id === comp.componentProductId);
+                            return (
+                              <div key={comp.componentProductId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', borderRadius: '14px', backgroundColor: '#f5f5f7', border: '1px solid rgba(0,0,0,.04)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                  <span style={{ fontWeight: 700, fontSize: '13px', padding: '2px 10px', borderRadius: '980px', backgroundColor: '#0071e31a', color: '#0071e3' }}>×{comp.quantityNeeded}</span>
+                                  <div>
+                                    <div style={{ fontWeight: 600, fontSize: '14px' }}>{compEq?.name ?? comp.componentProductId}</div>
+                                    <div style={{ fontSize: '11px', color: '#86868b' }}>{compEq?.brand}</div>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setNewPackCompositions(prev => prev.filter((_, i) => i !== idx))}
+                                  style={{ border: 'none', background: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '18px', lineHeight: 1, padding: '4px 8px' }}
+                                >×</button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    /* Exemplaires physiques */
+                    <div style={{ borderTop: '1px solid rgba(0,0,0,.06)', paddingTop: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <h4 style={{ fontSize: '16px', fontWeight: 700, margin: 0 }}>Exemplaires Physiques</h4>
+                          <p style={{ fontSize: '12px', color: '#86868b', margin: '4px 0 0' }}>Chaque exemplaire ajouté compte pour 1 unité. Les QR Codes pourront être assignés après la création.</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setNewItemsCount(c => c + 1)}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '8px 16px', borderRadius: '980px', backgroundColor: '#1d1d1f', color: '#ffffff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '13px' }}
+                        >
+                          <Plus style={{ width: '14px', height: '14px' }} />
+                          Ajouter un exemplaire
+                        </button>
+                      </div>
+                      {newItemsCount === 0 ? (
+                        <div style={{ padding: '24px', borderRadius: '18px', border: '1px dashed rgba(0,0,0,.15)', textAlign: 'center', color: '#86868b', fontSize: '14px' }}>
+                          Aucun exemplaire ajouté. Cliquez sur le bouton pour en ajouter.
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                          {Array.from({ length: newItemsCount }, (_, i) => (
+                            <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', borderRadius: '16px', backgroundColor: '#f5f5f7', border: '1px solid rgba(0,0,0,.04)' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                                <span style={{ fontWeight: 600, fontSize: '14px' }}>{name || 'Nouveau produit'} {i + 1}</span>
+                                {newItemsQrCodes[i] ? (
+                                  <span style={{ fontSize: '12px', fontFamily: 'monospace', padding: '4px 10px', borderRadius: '980px', backgroundColor: 'rgba(52,199,89,.12)', color: '#1a8a3a', fontWeight: 600 }}>
+                                    QR: {newItemsQrCodes[i]}
+                                  </span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => { setScanningNewItemIndex(i); setIsLocalScannerOpen(true); }}
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', padding: '4px 12px', borderRadius: '980px', backgroundColor: 'rgba(255,149,0,.1)', color: '#e08000', fontWeight: 600, border: '1px solid rgba(255,149,0,.3)', cursor: 'pointer' }}
+                                  >
+                                    <Camera style={{ width: '12px', height: '12px' }} />
+                                    Scanner QR
+                                  </button>
+                                )}
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                {newItemsQrCodes[i] && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setNewItemsQrCodes(prev => { const n = { ...prev }; delete n[i]; return n; })}
+                                    style={{ fontSize: '12px', padding: '4px 10px', borderRadius: '980px', backgroundColor: 'transparent', color: '#86868b', border: '1px solid rgba(0,0,0,.12)', cursor: 'pointer' }}
+                                  >
+                                    Changer QR
+                                  </button>
+                                )}
+                                {i === newItemsCount - 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setNewItemsCount(c => c - 1);
+                                      setNewItemsQrCodes(prev => { const n = { ...prev }; delete n[newItemsCount - 1]; return n; });
+                                    }}
+                                    style={{ padding: '6px 14px', borderRadius: '980px', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #fee2e2', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+                                  >
+                                    Retirer
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                 <div style={{ display: 'flex', gap: '16px', marginTop: '10px' }}>
                   <button
@@ -2670,8 +2821,84 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
-                  {/* Section Exemplaires Physiques (Assets) */}
+                  {/* Section Exemplaires Physiques (Assets) ou Composition Pack */}
                   <div style={{ borderTop: '1px solid rgba(0,0,0,.06)', paddingTop: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    {isPack ? (
+                      /* Pack composition editor in edit mode */
+                      <>
+                        <div>
+                          <h4 style={{ fontSize: '16px', fontWeight: 700, margin: 0 }}>Composition du Pack</h4>
+                          <p style={{ fontSize: '12px', color: '#86868b', margin: '4px 0 0' }}>Définissez les produits qui composent ce pack.</p>
+                        </div>
+                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                          <select
+                            value={draftCompId}
+                            onChange={e => setDraftCompId(e.target.value)}
+                            style={{ flex: 1, minWidth: '200px', padding: '10px 16px', borderRadius: '980px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '13px', backgroundColor: '#fff' }}
+                          >
+                            <option value="">— Choisir un produit —</option>
+                            {equipment.filter(e => !e.isPack && e.id !== editingItem?.id).map(e => (
+                              <option key={e.id} value={e.id}>{e.name} ({e.brand})</option>
+                            ))}
+                          </select>
+                          <input
+                            type="number" min={1} value={draftCompQty}
+                            onChange={e => setDraftCompQty(Math.max(1, Number(e.target.value)))}
+                            style={{ width: '80px', padding: '10px 14px', borderRadius: '980px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '13px', textAlign: 'center' }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!draftCompId) return;
+                              if (packCompositionRows.some(r => r.componentProductId === draftCompId)) return;
+                              const compEq = equipment.find(e => e.id === draftCompId);
+                              setPackCompositionRows(prev => [...prev, {
+                                id: `draft-${Date.now()}`,
+                                componentProductId: draftCompId,
+                                componentName: compEq?.name ?? draftCompId,
+                                componentBrand: compEq?.brand ?? '',
+                                componentCatLabel: compEq?.catLabel ?? '',
+                                componentImage: compEq?.image ?? null,
+                                quantityNeeded: draftCompQty,
+                              }]);
+                              setDraftCompId(''); setDraftCompQty(1);
+                            }}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '10px 18px', borderRadius: '980px', backgroundColor: '#1d1d1f', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '13px', whiteSpace: 'nowrap' }}
+                          >
+                            <Plus style={{ width: '14px', height: '14px' }} /> Ajouter
+                          </button>
+                        </div>
+                        {packCompLoading ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#86868b', fontSize: '14px' }}>
+                            <Loader2 style={{ width: '16px', height: '16px', animation: 'spin 1s linear infinite' }} /> Chargement...
+                          </div>
+                        ) : packCompositionRows.length === 0 ? (
+                          <div style={{ padding: '24px', borderRadius: '18px', border: '1px dashed rgba(0,0,0,.15)', textAlign: 'center', color: '#86868b', fontSize: '14px' }}>
+                            Aucun composant défini.
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {packCompositionRows.map((row) => (
+                              <div key={row.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', borderRadius: '14px', backgroundColor: '#f5f5f7', border: '1px solid rgba(0,0,0,.04)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                  <span style={{ fontWeight: 700, fontSize: '13px', padding: '2px 10px', borderRadius: '980px', backgroundColor: '#0071e31a', color: '#0071e3' }}>×{row.quantityNeeded}</span>
+                                  <div>
+                                    <div style={{ fontWeight: 600, fontSize: '14px' }}>{row.componentName}</div>
+                                    <div style={{ fontSize: '11px', color: '#86868b' }}>{row.componentBrand}</div>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setPackCompositionRows(prev => prev.filter(r => r.id !== row.id))}
+                                  style={{ border: 'none', background: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '18px', lineHeight: 1, padding: '4px 8px' }}
+                                >×</button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                    <>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
                         <h4 style={{ fontSize: '16px', fontWeight: 700, margin: 0 }}>Exemplaires Physiques (Assets)</h4>
@@ -2777,6 +3004,8 @@ export default function AdminDashboard() {
                         ))}
                       </div>
                     )}
+                    </>
+                  )}
                   </div>
                 </div>
 
