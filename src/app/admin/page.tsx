@@ -10,7 +10,7 @@ import ScannerModal from '@/components/scanner-modal';
 import PackIcon from '@/components/pack-icon';
 import EquipmentIcon from '@/components/equipment-icon';
 import { useRemoteScanner } from '@/lib/remote-scanner-context';
-import { Loader2, Plus, Edit2, Trash2, Users, Sliders, DollarSign, TrendingUp, BarChart3, Info, ChevronLeft, Tag, FileText, CreditCard, Camera, QrCode, X, Mail } from 'lucide-react';
+import { Loader2, Plus, Edit2, Trash2, Users, Sliders, DollarSign, TrendingUp, BarChart3, Info, ChevronLeft, Tag, FileText, CreditCard, Camera, QrCode, X, Mail, Percent, BookOpen, Receipt, Settings } from 'lucide-react';
 
 interface PackCompositionRow {
   id: string;
@@ -69,6 +69,7 @@ export default function AdminDashboard() {
   // Views: 'list' | 'add' | 'edit'
   const [view, setView] = useState<'list' | 'add' | 'edit'>('list');
   const [activeTab, setActiveTab] = useState<'catalogue' | 'categories' | 'users' | 'settings' | 'quotes'>('catalogue');
+  const [settingsSubTab, setSettingsSubTab] = useState<'tarifs' | 'paiement' | 'emails'>('tarifs');
   const [adminCoeffWeekend, setAdminCoeffWeekend] = useState('1.4');
   const [adminCoeff3Jours, setAdminCoeff3Jours] = useState('1.8');
   const [adminCoeffSemaine, setAdminCoeffSemaine] = useState('3.0');
@@ -1074,107 +1075,49 @@ export default function AdminDashboard() {
             
             {/* Header and Add Button */}
             <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '20px' }}>
-              <div style={{ overflowX: 'auto', scrollbarWidth: 'none', maxWidth: '100%' }}>
-              <div style={{ display: 'flex', gap: '6px', backgroundColor: '#e8e8ed', padding: '4px', borderRadius: '980px', width: 'max-content' }}>
-                <button
-                  onClick={() => setActiveTab('catalogue')}
-                  style={{
-                    padding: '8px 24px',
-                    borderRadius: '980px',
-                    border: 'none',
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    fontWeight: 600,
-                    fontFamily: 'inherit',
-                    transition: 'all .2s',
-                    backgroundColor: activeTab === 'catalogue' ? '#ffffff' : 'transparent',
-                    color: '#1d1d1f',
-                    boxShadow: activeTab === 'catalogue' ? '0 2px 8px rgba(0,0,0,.08)' : 'none'
-                  }}
-                >
-                  Gestion Catalogue
-                </button>
-                <button
-                  onClick={() => setActiveTab('categories')}
-                  style={{
-                    padding: '8px 24px',
-                    borderRadius: '980px',
-                    border: 'none',
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    fontWeight: 600,
-                    fontFamily: 'inherit',
-                    transition: 'all .2s',
-                    backgroundColor: activeTab === 'categories' ? '#ffffff' : 'transparent',
-                    color: '#1d1d1f',
-                    boxShadow: activeTab === 'categories' ? '0 2px 8px rgba(0,0,0,.08)' : 'none'
-                  }}
-                >
-                  Catégories Dyn.
-                </button>
-                <button
-                  onClick={() => setActiveTab('users')}
-                  style={{
-                    padding: '8px 24px',
-                    borderRadius: '980px',
-                    border: 'none',
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    fontWeight: 600,
-                    fontFamily: 'inherit',
-                    transition: 'all .2s',
-                    backgroundColor: activeTab === 'users' ? '#ffffff' : 'transparent',
-                    color: '#1d1d1f',
-                    boxShadow: activeTab === 'users' ? '0 2px 8px rgba(0,0,0,.08)' : 'none'
-                  }}
-                >
-                  Comptes Utilisateurs
-                </button>
-                <button
-                  onClick={() => setActiveTab('settings')}
-                  style={{
-                    padding: '8px 24px',
-                    borderRadius: '980px',
-                    border: 'none',
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    fontWeight: 600,
-                    fontFamily: 'inherit',
-                    transition: 'all .2s',
-                    backgroundColor: activeTab === 'settings' ? '#ffffff' : 'transparent',
-                    color: '#1d1d1f',
-                    boxShadow: activeTab === 'settings' ? '0 2px 8px rgba(0,0,0,.08)' : 'none'
-                  }}
-                >
-                  Paramètres &amp; TVA
-                </button>
-                <button
-                  onClick={() => setActiveTab('quotes')}
-                  style={{
-                    padding: '8px 24px',
-                    borderRadius: '980px',
-                    border: 'none',
-                    cursor: 'pointer',
-                    fontSize: '14px',
-                    fontWeight: 600,
-                    fontFamily: 'inherit',
-                    transition: 'all .2s',
-                    backgroundColor: activeTab === 'quotes' ? '#ffffff' : 'transparent',
-                    color: '#1d1d1f',
-                    boxShadow: activeTab === 'quotes' ? '0 2px 8px rgba(0,0,0,.08)' : 'none',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  Comptabilité
-                  {adminQuotes.filter(q => q.status === 'pending').length > 0 && (
-                    <span style={{ fontSize: '11px', fontWeight: 800, backgroundColor: '#0071e3', color: '#fff', padding: '1px 6px', borderRadius: '980px' }}>
-                      {adminQuotes.filter(q => q.status === 'pending').length}
-                    </span>
-                  )}
-                </button>
-              </div>
+              {/* ── Navbar admin responsive ── */}
+              <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' as any, scrollbarWidth: 'none' as any, msOverflowStyle: 'none' as any }}>
+                <div style={{ display: 'flex', gap: '4px', backgroundColor: '#e8e8ed', padding: '4px', borderRadius: '16px', width: 'max-content', minWidth: '100%' }}>
+                  {([
+                    { id: 'catalogue', icon: <BookOpen style={{ width: 15, height: 15, flexShrink: 0 }} />, label: 'Catalogue', shortLabel: 'Catalogue' },
+                    { id: 'categories', icon: <Tag style={{ width: 15, height: 15, flexShrink: 0 }} />, label: 'Catégories', shortLabel: 'Catégories' },
+                    { id: 'users', icon: <Users style={{ width: 15, height: 15, flexShrink: 0 }} />, label: 'Utilisateurs', shortLabel: 'Clients' },
+                    { id: 'settings', icon: <Settings style={{ width: 15, height: 15, flexShrink: 0 }} />, label: 'Paramètres', shortLabel: 'Params' },
+                    { id: 'quotes', icon: <Receipt style={{ width: 15, height: 15, flexShrink: 0 }} />, label: 'Comptabilité', shortLabel: 'Compta', badge: adminQuotes.filter(q => q.status === 'pending').length },
+                  ] as const).map(tab => {
+                    const isActive = activeTab === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id as typeof activeTab)}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: '6px',
+                          padding: '9px 16px',
+                          borderRadius: '12px',
+                          border: 'none',
+                          cursor: 'pointer',
+                          fontSize: '13px',
+                          fontWeight: isActive ? 700 : 500,
+                          fontFamily: 'inherit',
+                          transition: 'all .2s',
+                          backgroundColor: isActive ? '#ffffff' : 'transparent',
+                          color: isActive ? '#1d1d1f' : '#6e6e73',
+                          boxShadow: isActive ? '0 2px 8px rgba(0,0,0,.10)' : 'none',
+                          whiteSpace: 'nowrap',
+                          flexShrink: 0,
+                        }}
+                      >
+                        {tab.icon}
+                        <span>{tab.label}</span>
+                        {(tab as any).badge > 0 && (
+                          <span style={{ fontSize: '10px', fontWeight: 800, backgroundColor: '#0071e3', color: '#fff', padding: '1px 6px', borderRadius: '980px', marginLeft: '2px' }}>
+                            {(tab as any).badge}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               {activeTab === 'catalogue' && (
@@ -1718,222 +1661,229 @@ export default function AdminDashboard() {
             )}
 
             {activeTab === 'settings' && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '30px', maxWidth: '600px' }}>
-              <div style={{ backgroundColor: '#ffffff', border: '1px solid rgba(0,0,0,.08)', borderRadius: '24px', padding: '30px', boxShadow: '0 4px 20px rgba(0,0,0,.02)' }}>
-                <h3 style={{ fontSize: '18px', fontWeight: 800, margin: '0 0 20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Sliders style={{ width: '20px', height: '20px', color: '#0071e3' }} /> Configuration Globale &amp; TVA
-                </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
 
-                <form onSubmit={handleUpdateSettings} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                  {settingsMessage && (
-                    <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #dcfce7', borderRadius: '12px', padding: '12px', fontSize: '13px', color: '#15803d', fontWeight: 500 }}>
-                      {settingsMessage}
+                {/* Settings page header */}
+                <div>
+                  <h3 style={{ fontSize: '22px', fontWeight: 800, margin: '0 0 4px', letterSpacing: '-.02em' }}>Paramètres</h3>
+                  <p style={{ margin: 0, fontSize: '14px', color: '#86868b' }}>Configuration globale de votre espace Sonelyx</p>
+                </div>
+
+                {/* Settings sub-navigation */}
+                <div style={{ display: 'flex', gap: '4px', backgroundColor: '#f5f5f7', padding: '4px', borderRadius: '14px', width: 'fit-content', flexWrap: 'wrap' }}>
+                  {([
+                    { id: 'tarifs', icon: <Percent style={{ width: 14, height: 14 }} />, label: 'TVA & Tarifs' },
+                    { id: 'paiement', icon: <CreditCard style={{ width: 14, height: 14 }} />, label: 'Paiement' },
+                    { id: 'emails', icon: <Mail style={{ width: 14, height: 14 }} />, label: 'E-mails' },
+                  ] as const).map(sub => (
+                    <button
+                      key={sub.id}
+                      onClick={() => setSettingsSubTab(sub.id)}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '6px',
+                        padding: '8px 16px', borderRadius: '10px', border: 'none', cursor: 'pointer',
+                        fontSize: '13px', fontWeight: settingsSubTab === sub.id ? 700 : 500,
+                        fontFamily: 'inherit', transition: 'all .15s',
+                        backgroundColor: settingsSubTab === sub.id ? '#ffffff' : 'transparent',
+                        color: settingsSubTab === sub.id ? '#1d1d1f' : '#6e6e73',
+                        boxShadow: settingsSubTab === sub.id ? '0 1px 6px rgba(0,0,0,.1)' : 'none',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {sub.icon}{sub.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* ── Sub-tab: TVA & Tarifs ── */}
+                {settingsSubTab === 'tarifs' && (
+                  <form onSubmit={handleUpdateSettings}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '20px' }}>
+
+                      {/* TVA card */}
+                      <div style={{ backgroundColor: '#ffffff', border: '1px solid rgba(0,0,0,.08)', borderRadius: '20px', padding: '28px', boxShadow: '0 2px 12px rgba(0,0,0,.03)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+                          <div style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: '#e8f1fd', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Percent style={{ width: 16, height: 16, color: '#0071e3' }} />
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '15px', fontWeight: 800, color: '#1d1d1f' }}>Taux de TVA</div>
+                            <div style={{ fontSize: '12px', color: '#86868b' }}>Appliqué sur tout le catalogue</div>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <input
+                            type="number" placeholder="20" value={adminTva}
+                            onChange={e => setAdminTva(e.target.value)}
+                            style={{ flex: 1, padding: '12px 16px', borderRadius: '12px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '20px', fontWeight: 700, color: '#1d1d1f', fontFamily: 'inherit' }}
+                            required
+                          />
+                          <span style={{ fontSize: '24px', fontWeight: 700, color: '#86868b' }}>%</span>
+                        </div>
+                        <p style={{ margin: '10px 0 0', fontSize: '12px', color: '#86868b', lineHeight: 1.5 }}>
+                          Utilisé pour convertir les prix HT ↔ TTC dans les devis et le catalogue.
+                        </p>
+                      </div>
+
+                      {/* Coefficients card */}
+                      <div style={{ backgroundColor: '#ffffff', border: '1px solid rgba(0,0,0,.08)', borderRadius: '20px', padding: '28px', boxShadow: '0 2px 12px rgba(0,0,0,.03)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+                          <div style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: '#e8f1fd', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Sliders style={{ width: 16, height: 16, color: '#0071e3' }} />
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '15px', fontWeight: 800, color: '#1d1d1f' }}>Coefficients de durée</div>
+                            <div style={{ fontSize: '12px', color: '#86868b' }}>Multiplicateurs sur le prix journalier</div>
+                          </div>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                          {[
+                            { label: 'Weekend', sub: '2 jours', value: adminCoeffWeekend, set: setAdminCoeffWeekend, step: '0.05', placeholder: '1.4' },
+                            { label: '3 jours', sub: 'Location courte', value: adminCoeff3Jours, set: setAdminCoeff3Jours, step: '0.05', placeholder: '1.8' },
+                            { label: '4–6 jours', sub: 'Auto (j × 0.7)', value: '', set: () => {}, step: '', placeholder: '', disabled: true },
+                            { label: 'Semaine', sub: '7+ jours', value: adminCoeffSemaine, set: setAdminCoeffSemaine, step: '0.1', placeholder: '3.0' },
+                          ].map((coeff, i) => (
+                            <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              <label style={{ fontSize: '11px', fontWeight: 700, color: '#86868b', textTransform: 'uppercase', letterSpacing: '.04em' }}>{coeff.label}</label>
+                              <div style={{ fontSize: '10px', color: '#c7c7cc', marginBottom: '4px' }}>{coeff.sub}</div>
+                              <input
+                                type={coeff.disabled ? 'text' : 'number'}
+                                step={coeff.step}
+                                placeholder={coeff.placeholder || '—'}
+                                value={coeff.disabled ? 'Calculé auto.' : coeff.value}
+                                onChange={coeff.disabled ? undefined : e => coeff.set(e.target.value)}
+                                disabled={coeff.disabled}
+                                style={{ padding: '10px 12px', borderRadius: '10px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '15px', fontWeight: 700, fontFamily: 'inherit', backgroundColor: coeff.disabled ? '#f5f5f7' : '#fff', color: coeff.disabled ? '#c7c7cc' : '#1d1d1f' }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     </div>
-                  )}
-                  {settingsError && (
-                    <div style={{ backgroundColor: '#fef2f2', border: '1px solid #fee2e2', borderRadius: '12px', padding: '12px', fontSize: '13px', color: '#ef4444', fontWeight: 500 }}>
-                      {settingsError}
+
+                    {/* Feedback messages */}
+                    {settingsMessage && (
+                      <div style={{ marginTop: '16px', backgroundColor: '#f0fdf4', border: '1px solid #dcfce7', borderRadius: '12px', padding: '12px 16px', fontSize: '13px', color: '#15803d', fontWeight: 500 }}>
+                        ✓ {settingsMessage}
+                      </div>
+                    )}
+                    {settingsError && (
+                      <div style={{ marginTop: '16px', backgroundColor: '#fef2f2', border: '1px solid #fee2e2', borderRadius: '12px', padding: '12px 16px', fontSize: '13px', color: '#ef4444', fontWeight: 500 }}>
+                        {settingsError}
+                      </div>
+                    )}
+                    <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end' }}>
+                      <button type="submit" disabled={settingsLoading} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '12px 28px', borderRadius: '980px', backgroundColor: '#1d1d1f', color: '#fff', border: 'none', cursor: settingsLoading ? 'default' : 'pointer', fontWeight: 600, fontSize: '14px', fontFamily: 'inherit', opacity: settingsLoading ? .6 : 1 }}>
+                        {settingsLoading ? <Loader2 style={{ width: 15, height: 15, animation: 'spin 1s linear infinite' }} /> : null}
+                        Enregistrer
+                      </button>
                     </div>
-                  )}
+                  </form>
+                )}
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '13px', fontWeight: 600 }}>Taux de TVA (%) *</label>
-                    <input
-                      type="number"
-                      placeholder="20"
-                      value={adminTva}
-                      onChange={e => setAdminTva(e.target.value)}
-                      style={{ padding: '10px 16px', borderRadius: '980px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '14px' }}
-                      required
-                    />
-                    <p style={{ margin: '4px 0 12px', fontSize: '12px', color: '#86868b', lineHeight: 1.4 }}>
-                      Ce taux sera appliqué sur l'ensemble du catalogue pour convertir les prix HT et TTC, ainsi que pour les calculs de devis.
-                    </p>
-                  </div>
+                {/* ── Sub-tab: Paiement ── */}
+                {settingsSubTab === 'paiement' && (
+                  <form onSubmit={handleUpdatePaymentSettings}>
+                    <div style={{ backgroundColor: '#ffffff', border: '1px solid rgba(0,0,0,.08)', borderRadius: '20px', padding: '28px', boxShadow: '0 2px 12px rgba(0,0,0,.03)', maxWidth: '600px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '24px' }}>
+                        <div style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: '#e8f1fd', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <CreditCard style={{ width: 16, height: 16, color: '#0071e3' }} />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '15px', fontWeight: 800, color: '#1d1d1f' }}>Coordonnées bancaires</div>
+                          <div style={{ fontSize: '12px', color: '#86868b' }}>Affichées sous les factures pour les virements</div>
+                        </div>
+                      </div>
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '13px', fontWeight: 600 }}>Coefficient Weekend (2 jours) *</label>
-                    <input
-                      type="number"
-                      step="0.05"
-                      placeholder="1.4"
-                      value={adminCoeffWeekend}
-                      onChange={e => setAdminCoeffWeekend(e.target.value)}
-                      style={{ padding: '10px 16px', borderRadius: '980px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '14px' }}
-                      required
-                    />
-                    <p style={{ margin: '4px 0 12px', fontSize: '12px', color: '#86868b', lineHeight: 1.4 }}>
-                      Appliqué pour une location d'exactement 2 jours (ex: 1.4x le prix journalier).
-                    </p>
-                  </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                        {paymentMessage && (
+                          <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #dcfce7', borderRadius: '12px', padding: '12px 16px', fontSize: '13px', color: '#15803d', fontWeight: 500 }}>
+                            ✓ {paymentMessage}
+                          </div>
+                        )}
+                        {paymentError && (
+                          <div style={{ backgroundColor: '#fef2f2', border: '1px solid #fee2e2', borderRadius: '12px', padding: '12px 16px', fontSize: '13px', color: '#ef4444', fontWeight: 500 }}>
+                            {paymentError}
+                          </div>
+                        )}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <label style={{ fontSize: '12px', fontWeight: 700, color: '#86868b', textTransform: 'uppercase', letterSpacing: '.04em' }}>IBAN</label>
+                            <input type="text" placeholder="FR76 XXXX XXXX…" value={adminIban} onChange={e => setAdminIban(e.target.value)} style={{ padding: '11px 14px', borderRadius: '12px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '13px', fontFamily: 'monospace', letterSpacing: '.04em' }} />
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <label style={{ fontSize: '12px', fontWeight: 700, color: '#86868b', textTransform: 'uppercase', letterSpacing: '.04em' }}>BIC / SWIFT</label>
+                            <input type="text" placeholder="BNPAFRPP" value={adminBic} onChange={e => setAdminBic(e.target.value)} style={{ padding: '11px 14px', borderRadius: '12px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '13px', fontFamily: 'monospace', letterSpacing: '.04em' }} />
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          <label style={{ fontSize: '12px', fontWeight: 700, color: '#86868b', textTransform: 'uppercase', letterSpacing: '.04em' }}>Instructions de paiement</label>
+                          <textarea rows={3} placeholder="Ex : Virement sous 30 jours à réception de facture." value={adminPaymentInstructions} onChange={e => setAdminPaymentInstructions(e.target.value)} style={{ padding: '12px 14px', borderRadius: '12px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '13px', fontFamily: 'inherit', resize: 'vertical', lineHeight: 1.6 }} />
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                          <button type="submit" disabled={paymentLoading} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '12px 28px', borderRadius: '980px', backgroundColor: '#1d1d1f', color: '#fff', border: 'none', cursor: paymentLoading ? 'default' : 'pointer', fontWeight: 600, fontSize: '14px', fontFamily: 'inherit', opacity: paymentLoading ? .6 : 1 }}>
+                            {paymentLoading ? <Loader2 style={{ width: 15, height: 15, animation: 'spin 1s linear infinite' }} /> : null}
+                            Enregistrer
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </form>
+                )}
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '13px', fontWeight: 600 }}>Coefficient 3 jours *</label>
-                    <input
-                      type="number"
-                      step="0.05"
-                      placeholder="1.8"
-                      value={adminCoeff3Jours}
-                      onChange={e => setAdminCoeff3Jours(e.target.value)}
-                      style={{ padding: '10px 16px', borderRadius: '980px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '14px' }}
-                      required
-                    />
-                    <p style={{ margin: '4px 0 12px', fontSize: '12px', color: '#86868b', lineHeight: 1.4 }}>
-                      Appliqué pour une location d'exactement 3 jours.
-                    </p>
-                  </div>
+                {/* ── Sub-tab: Emails ── */}
+                {settingsSubTab === 'emails' && (
+                  <form onSubmit={handleUpdateEmailSettings}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '720px' }}>
+                      {emailSettingsMessage && (
+                        <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #dcfce7', borderRadius: '12px', padding: '12px 16px', fontSize: '13px', color: '#15803d', fontWeight: 500 }}>
+                          ✓ {emailSettingsMessage}
+                        </div>
+                      )}
+                      {emailSettingsError && (
+                        <div style={{ backgroundColor: '#fef2f2', border: '1px solid #fee2e2', borderRadius: '12px', padding: '12px 16px', fontSize: '13px', color: '#ef4444', fontWeight: 500 }}>
+                          {emailSettingsError}
+                        </div>
+                      )}
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '13px', fontWeight: 600 }}>Coefficient Semaine (7 jours) *</label>
-                    <input
-                      type="number"
-                      step="0.1"
-                      placeholder="3.0"
-                      value={adminCoeffSemaine}
-                      onChange={e => setAdminCoeffSemaine(e.target.value)}
-                      style={{ padding: '10px 16px', borderRadius: '980px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '14px' }}
-                      required
-                    />
-                    <p style={{ margin: '4px 0 12px', fontSize: '12px', color: '#86868b', lineHeight: 1.4 }}>
-                      Base de calcul hebdomadaire (ex: louer 7 jours équivaut à 3 jours de tarif journalier standard).
-                    </p>
-                  </div>
+                      {[
+                        { key: 'collection', label: 'Rappel retrait matériel (J-1)', emoji: '📦', value: adminEmailCollectionText, set: setAdminEmailCollectionText, placeholder: "Bonjour {client_name},\n\nVotre matériel pour le projet \"{project_name}\" est prêt à être retiré…" },
+                        { key: 'return', label: 'Rappel retour matériel (J-1)', emoji: '🚛', value: adminEmailReturnText, set: setAdminEmailReturnText, placeholder: "Bonjour {client_name},\n\nNous vous rappelons que le retour du matériel pour \"{project_name}\" est prévu…" },
+                      ].map(tmpl => (
+                        <div key={tmpl.key} style={{ backgroundColor: '#ffffff', border: '1px solid rgba(0,0,0,.08)', borderRadius: '20px', padding: '24px', boxShadow: '0 2px 12px rgba(0,0,0,.03)' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+                            <span style={{ fontSize: '22px' }}>{tmpl.emoji}</span>
+                            <div style={{ fontSize: '14px', fontWeight: 700, color: '#1d1d1f' }}>{tmpl.label}</div>
+                          </div>
+                          <textarea
+                            rows={6} required
+                            placeholder={tmpl.placeholder}
+                            value={tmpl.value}
+                            onChange={e => tmpl.set(e.target.value)}
+                            style={{ width: '100%', padding: '12px 14px', borderRadius: '12px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '13px', fontFamily: 'inherit', resize: 'vertical', lineHeight: 1.7, boxSizing: 'border-box' as const }}
+                          />
+                        </div>
+                      ))}
 
-                  <button
-                    type="submit"
-                    disabled={settingsLoading}
-                    style={{
-                      width: '100%',
-                      padding: '12px',
-                      borderRadius: '980px',
-                      backgroundColor: '#1d1d1f',
-                      color: '#fff',
-                      border: 'none',
-                      cursor: 'pointer',
-                      fontWeight: 600,
-                      fontSize: '14px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px',
-                      marginTop: '6px'
-                    }}
-                  >
-                    {settingsLoading ? <Loader2 style={{ width: '16px', height: '16px', animation: 'spin 1s linear infinite' }} /> : 'Enregistrer les paramètres'}
-                  </button>
-                </form>
+                      <div style={{ backgroundColor: '#f5f5f7', borderRadius: '14px', padding: '16px 20px' }}>
+                        <div style={{ fontSize: '12px', fontWeight: 700, color: '#1d1d1f', marginBottom: '8px' }}>Variables dynamiques disponibles</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                          {['{client_name}', '{project_name}', '{date}', '{time}'].map(v => (
+                            <code key={v} style={{ fontSize: '12px', backgroundColor: '#e8e8ed', color: '#1d1d1f', padding: '3px 8px', borderRadius: '6px', fontFamily: 'monospace' }}>{v}</code>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                        <button type="submit" disabled={emailSettingsLoading} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '12px 28px', borderRadius: '980px', backgroundColor: '#1d1d1f', color: '#fff', border: 'none', cursor: emailSettingsLoading ? 'default' : 'pointer', fontWeight: 600, fontSize: '14px', fontFamily: 'inherit', opacity: emailSettingsLoading ? .6 : 1 }}>
+                          {emailSettingsLoading ? <Loader2 style={{ width: 15, height: 15, animation: 'spin 1s linear infinite' }} /> : null}
+                          Enregistrer les e-mails
+                        </button>
+                      </div>
+                    </div>
+                  </form>
+                )}
               </div>
-
-              {/* Coordonnées bancaires */}
-              <div style={{ backgroundColor: '#ffffff', border: '1px solid rgba(0,0,0,.08)', borderRadius: '24px', padding: '30px', boxShadow: '0 4px 20px rgba(0,0,0,.02)' }}>
-                <h3 style={{ fontSize: '18px', fontWeight: 800, margin: '0 0 20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <CreditCard style={{ width: '20px', height: '20px', color: '#0071e3' }} /> Coordonnées Bancaires
-                </h3>
-                <form onSubmit={handleUpdatePaymentSettings} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                  {paymentMessage && (
-                    <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #dcfce7', borderRadius: '12px', padding: '12px', fontSize: '13px', color: '#15803d', fontWeight: 500 }}>
-                      {paymentMessage}
-                    </div>
-                  )}
-                  {paymentError && (
-                    <div style={{ backgroundColor: '#fef2f2', border: '1px solid #fee2e2', borderRadius: '12px', padding: '12px', fontSize: '13px', color: '#ef4444', fontWeight: 500 }}>
-                      {paymentError}
-                    </div>
-                  )}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '13px', fontWeight: 600 }}>IBAN</label>
-                    <input type="text" placeholder="FR76 XXXX XXXX XXXX XXXX XXXX XXX" value={adminIban} onChange={e => setAdminIban(e.target.value)} style={{ padding: '10px 16px', borderRadius: '980px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '14px', fontFamily: 'inherit' }} />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '13px', fontWeight: 600 }}>BIC / SWIFT</label>
-                    <input type="text" placeholder="BNPAFRPP" value={adminBic} onChange={e => setAdminBic(e.target.value)} style={{ padding: '10px 16px', borderRadius: '980px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '14px', fontFamily: 'inherit' }} />
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '13px', fontWeight: 600 }}>Instructions de paiement</label>
-                    <textarea rows={3} placeholder="Ex : Virement bancaire à effectuer sous 30 jours à réception de la facture." value={adminPaymentInstructions} onChange={e => setAdminPaymentInstructions(e.target.value)} style={{ padding: '12px 16px', borderRadius: '16px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '14px', fontFamily: 'inherit', resize: 'vertical' }} />
-                  </div>
-                  <button type="submit" disabled={paymentLoading} style={{ width: '100%', padding: '12px', borderRadius: '980px', backgroundColor: '#1d1d1f', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginTop: '6px' }}>
-                    {paymentLoading ? <Loader2 style={{ width: '16px', height: '16px', animation: 'spin 1s linear infinite' }} /> : 'Enregistrer les coordonnées'}
-                  </button>
-                </form>
-              </div>
-
-              {/* Configuration des Emails Transactionnels */}
-              <div style={{ backgroundColor: '#ffffff', border: '1px solid rgba(0,0,0,.08)', borderRadius: '24px', padding: '30px', boxShadow: '0 4px 20px rgba(0,0,0,.02)' }}>
-                <h3 style={{ fontSize: '18px', fontWeight: 800, margin: '0 0 20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Mail style={{ width: '20px', height: '20px', color: '#0071e3' }} /> Configuration des Emails Transactionnels
-                </h3>
-                <form onSubmit={handleUpdateEmailSettings} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                  {emailSettingsMessage && (
-                    <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #dcfce7', borderRadius: '12px', padding: '12px', fontSize: '13px', color: '#15803d', fontWeight: 500 }}>
-                      {emailSettingsMessage}
-                    </div>
-                  )}
-                  {emailSettingsError && (
-                    <div style={{ backgroundColor: '#fef2f2', border: '1px solid #fee2e2', borderRadius: '12px', padding: '12px', fontSize: '13px', color: '#ef4444', fontWeight: 500 }}>
-                      {emailSettingsError}
-                    </div>
-                  )}
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '13px', fontWeight: 600 }}>Rappel avant Retrait du Matériel (J-1)</label>
-                    <textarea
-                      rows={6}
-                      placeholder="Modèle d'e-mail de retrait..."
-                      value={adminEmailCollectionText}
-                      onChange={e => setAdminEmailCollectionText(e.target.value)}
-                      style={{ padding: '12px 16px', borderRadius: '16px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '14px', fontFamily: 'inherit', resize: 'vertical' }}
-                      required
-                    />
-                  </div>
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '13px', fontWeight: 600 }}>Rappel avant Retour du Matériel (J-1 ou Jour J)</label>
-                    <textarea
-                      rows={6}
-                      placeholder="Modèle d'e-mail de retour..."
-                      value={adminEmailReturnText}
-                      onChange={e => setAdminEmailReturnText(e.target.value)}
-                      style={{ padding: '12px 16px', borderRadius: '16px', border: '1px solid rgba(0,0,0,.12)', outline: 'none', fontSize: '14px', fontFamily: 'inherit', resize: 'vertical' }}
-                      required
-                    />
-                  </div>
-
-                  <div style={{ backgroundColor: '#f5f5f7', borderRadius: '16px', padding: '16px 20px', fontSize: '12px', color: '#6e6e73', lineHeight: 1.5 }}>
-                    <strong style={{ color: '#1d1d1f', display: 'block', marginBottom: '6px' }}>Variables dynamiques disponibles :</strong>
-                    <ul style={{ margin: 0, paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <li><code>{`{client_name}`}</code> : Nom complet du client</li>
-                      <li><code>{`{project_name}`}</code> : Nom du projet / événement</li>
-                      <li><code>{`{date}`}</code> : Date de retrait ou de retour (ex: lundi 14 juillet)</li>
-                      <li><code>{`{time}`}</code> : Heure conseillée ou limite (ex: 09:00 ou 18:00)</li>
-                    </ul>
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={emailSettingsLoading}
-                    style={{
-                      width: '100%',
-                      padding: '12px',
-                      borderRadius: '980px',
-                      backgroundColor: '#1d1d1f',
-                      color: '#fff',
-                      border: 'none',
-                      cursor: 'pointer',
-                      fontWeight: 600,
-                      fontSize: '14px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px',
-                      marginTop: '6px'
-                    }}
-                  >
-                    {emailSettingsLoading ? <Loader2 style={{ width: '16px', height: '16px', animation: 'spin 1s linear infinite' }} /> : 'Enregistrer les e-mails'}
-                  </button>
-                </form>
-              </div>
-            </div>
             )}
 
             {activeTab === 'quotes' && (() => {

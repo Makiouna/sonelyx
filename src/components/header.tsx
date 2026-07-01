@@ -149,8 +149,8 @@ export default function Header({ subTitle, links }: HeaderProps) {
                 {link.label}
               </Link>
             ))}
-            <div style={{ paddingTop: '14px' }}>
-              <UserNav />
+            <div style={{ paddingTop: '14px', borderTop: '1px solid rgba(0,0,0,.06)', marginTop: '4px' }}>
+              <UserNav variant="inline" />
             </div>
           </div>
         )}

@@ -34,7 +34,7 @@ export interface PaymentRouterProps {
   /** Optional extra instructions shown below the RIB card */
   paymentInstructions?: string;
   /** Pre-populate from the quote's stored status so the success state survives a page refresh */
-  initialPaymentStatus?: 'PENDING' | 'SUCCEEDED' | 'FAILED' | null;
+  initialPaymentStatus?: 'PENDING' | 'SUCCEEDED' | 'FAILED' | 'CASH' | null;
   /** Called after a successful Stripe payment so the parent can re-fetch */
   onSuccess?: () => void;
 }
@@ -403,6 +403,7 @@ function BankTransferZone({
             {ribFields.map(({ label, value, mono }, i) => (
               <div
                 key={label}
+                className="rib-field-row"
                 style={{
                   display: 'grid', gridTemplateColumns: '148px 1fr',
                   padding: '11px 18px', gap: 12,
@@ -417,13 +418,18 @@ function BankTransferZone({
                   fontFamily: mono
                     ? '"SF Mono", "Fira Code", "Roboto Mono", monospace'
                     : 'inherit',
-                  wordBreak: 'break-all', lineHeight: 1.5,
+                  overflowWrap: 'break-word', lineHeight: 1.5,
                 }}>
                   {value}
                 </span>
               </div>
             ))}
           </div>
+          <style>{`
+            @media (max-width: 480px) {
+              .rib-field-row { grid-template-columns: 1fr !important; gap: 4px !important; }
+            }
+          `}</style>
         </div>
       ) : (
         <div style={{
@@ -606,6 +612,26 @@ export default function PaymentRouter({
   onSuccess = () => {},
 }: PaymentRouterProps) {
   const isStripeMode = totalAmount <= STRIPE_THRESHOLD;
+
+  // Cash payment already recorded by admin — show confirmation, no action needed
+  if (initialPaymentStatus === 'CASH') {
+    return (
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 12,
+        padding: '16px 20px', borderRadius: 20,
+        backgroundColor: '#f0fdf4', border: '1px solid rgba(21,128,61,.2)',
+        fontFamily: 'var(--font-hanken-grotesk), -apple-system, BlinkMacSystemFont, sans-serif',
+      }}>
+        <CheckCircle2 style={{ width: 22, height: 22, color: '#15803d', flexShrink: 0 }} />
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: '#15803d' }}>Règlement en espèces confirmé</div>
+          <div style={{ fontSize: 12, color: '#86868b', marginTop: 3 }}>
+            {fmt(totalAmount)} — enregistré par l'administrateur.
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{

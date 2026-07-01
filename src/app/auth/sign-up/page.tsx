@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { authClient } from '@/lib/auth-client';
 import { Loader2 } from 'lucide-react';
@@ -12,7 +11,6 @@ export default function SignUp() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const router = useRouter();
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,8 +32,10 @@ export default function SignUp() {
       setError(authError.message || 'Une erreur est survenue lors de la création du compte.');
       setLoading(false);
     } else {
-      router.push('/dashboard');
-      router.refresh();
+      // Full reload (not router.push) so every client picks up the fresh session
+      // cookie immediately — a soft navigation can briefly show stale cached
+      // "no session" state and bounce the user back to this page.
+      window.location.href = '/dashboard';
     }
   };
 

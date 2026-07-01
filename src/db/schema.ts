@@ -113,7 +113,7 @@ export const quote = pgTable('quote', {
   stripePaymentIntentId: text('stripe_payment_intent_id'), // PaymentIntent Stripe lié
   depositReminderSentAt: timestamp('deposit_reminder_sent_at'), // date du dernier rappel J-3 envoyé
   invoiceStripePaymentIntentId: text('invoice_stripe_payment_intent_id'),
-  invoicePaymentStatus: text('invoice_payment_status').$type<'PENDING' | 'SUCCEEDED' | 'FAILED'>(),
+  invoicePaymentStatus: text('invoice_payment_status').$type<'PENDING' | 'SUCCEEDED' | 'FAILED' | 'CASH'>(),
   cancellationReason: text('cancellation_reason'),
   cancelledAt: timestamp('cancelled_at'),
   cartReminderSentAt: timestamp('cart_reminder_sent_at'),
@@ -153,4 +153,40 @@ export const systemSettings = pgTable('system_settings', {
   emailCollectionText: text('email_collection_text').notNull(),
   emailReturnText: text('email_return_text').notNull(),
   updatedAt: timestamp('updatedAt').notNull(),
+});
+
+export const documentRequests = pgTable('document_requests', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  customerId: text('customer_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  requestedTypes: text('requested_types').notNull(), // JSON string of string[]
+  token: text('token').notNull().unique(),
+  status: text('status').$type<'PENDING' | 'COMPLETED'>().notNull().default('PENDING'),
+  expiresAt: timestamp('expires_at').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const customerDocuments = pgTable('customer_documents', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  customerId: text('customer_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  requestId: uuid('request_id').references(() => documentRequests.id, { onDelete: 'set null' }),
+  documentType: text('document_type').notNull(),
+  filePath: text('file_path').notNull(),
+  uploadedAt: timestamp('uploaded_at').defaultNow().notNull(),
+});
+
+export const projectInspections = pgTable('project_inspections', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  quoteId: text('quote_id').notNull().references(() => quote.id, { onDelete: 'cascade' }),
+  type: text('type').$type<'DEPART' | 'RETOUR'>().notNull(),
+  photoUrls: text('photo_urls').notNull().default('[]'), // JSON string of URL[]
+  adminSignature: text('admin_signature').notNull(),
+  adminSignedAt: timestamp('admin_signed_at').notNull(),
+  clientSignature: text('client_signature'),
+  clientSignedAt: timestamp('client_signed_at'),
+  clientIp: text('client_ip'),
+  clientDevice: text('client_device'),
+  clientGeoLocation: text('client_geo_location'),
+  clientUserId: text('client_user_id'),
+  status: text('status').$type<'PENDING_CLIENT' | 'COMPLETED'>().notNull().default('PENDING_CLIENT'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
 });

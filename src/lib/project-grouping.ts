@@ -51,7 +51,7 @@ export interface Quote {
   depositStatus: 'PENDING' | 'AUTHORIZED' | 'CAPTURED' | 'RELEASED' | 'BYPASSED' | null;
   stripePaymentIntentId: string | null;
   invoiceStripePaymentIntentId: string | null;
-  invoicePaymentStatus: 'PENDING' | 'SUCCEEDED' | 'FAILED' | null;
+  invoicePaymentStatus: 'PENDING' | 'SUCCEEDED' | 'FAILED' | 'CASH' | null;
   cancellationReason: string | null;
   cancelledAt: string | null;
   createdAt: string;

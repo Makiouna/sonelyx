@@ -5,6 +5,7 @@ import { stripe } from '@/lib/stripe';
 import { db } from '@/db';
 import { quote as quoteTable } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
+import { sendInvoicePaymentConfirmationEmail } from '@/lib/email';
 
 // Confirms invoice payment status right after the client-side Stripe confirmation.
 // Mirrors confirm-deposit — works without webhooks by polling paymentIntents.retrieve().
@@ -48,6 +49,15 @@ export async function POST(request: Request) {
         .update(quoteTable)
         .set({ invoicePaymentStatus: 'SUCCEEDED', updatedAt: new Date() })
         .where(eq(quoteTable.id, quoteId));
+
+      sendInvoicePaymentConfirmationEmail(
+        session.user.email,
+        session.user.name,
+        quote.projectName ?? 'Votre Projet',
+        quote.startDate,
+        quote.totalTTC,
+        'card',
+      ).catch(err => console.error('Payment confirmation email failed:', err));
 
       return NextResponse.json({ success: true, invoicePaymentStatus: 'SUCCEEDED' });
     }

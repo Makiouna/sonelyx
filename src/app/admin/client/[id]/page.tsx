@@ -34,9 +34,19 @@ import {
   Ban,
   ExternalLink,
   X,
+  Banknote,
+  ClipboardList,
+  FileImage,
+  Send,
+  PenLine,
+  Plus,
+  FolderOpen,
+  Eye,
+  FileCheck2,
 } from 'lucide-react';
 import { groupQuotesByProject, getProjectStatus, projectStatusLabel, projectStatusColors } from '@/lib/project-grouping';
 import ScannerModal from '@/components/scanner-modal';
+import SignaturePad from '@/components/signature-pad';
 import { useRemoteScanner } from '@/lib/remote-scanner-context';
 
 interface EquipmentItem {
@@ -86,7 +96,7 @@ interface Quote {
   depositStatus: 'PENDING' | 'AUTHORIZED' | 'CAPTURED' | 'RELEASED' | 'BYPASSED' | null;
   stripePaymentIntentId: string | null;
   invoiceStripePaymentIntentId: string | null;
-  invoicePaymentStatus: 'PENDING' | 'SUCCEEDED' | 'FAILED' | null;
+  invoicePaymentStatus: 'PENDING' | 'SUCCEEDED' | 'FAILED' | 'CASH' | null;
   cancellationReason: string | null;
   cancelledAt: string | null;
   createdAt: string;
@@ -102,6 +112,55 @@ interface ClientUser {
   role: string;
   createdAt: string;
 }
+
+interface Inspection {
+  id: string;
+  quoteId: string;
+  type: 'DEPART' | 'RETOUR';
+  photoUrls: string[];
+  adminSignature: string;
+  adminSignedAt: string;
+  clientSignature: string | null;
+  clientSignedAt: string | null;
+  clientIp: string | null;
+  clientDevice: string | null;
+  clientGeoLocation: string | null;
+  clientUserId: string | null;
+  status: 'PENDING_CLIENT' | 'COMPLETED';
+  createdAt: string;
+  // enriched from API join
+  clientName?: string;
+  clientEmail?: string;
+}
+
+interface DocumentRequest {
+  id: string;
+  customerId: string;
+  requestedTypes: string;
+  token: string;
+  status: 'PENDING' | 'COMPLETED';
+  expiresAt: string;
+  createdAt: string;
+}
+
+interface CustomerDocument {
+  id: string;
+  customerId: string;
+  requestId: string | null;
+  documentType: string;
+  filePath: string;
+  uploadedAt: string;
+}
+
+const DOC_TYPE_LABELS: Record<string, string> = {
+  id_card_recto: "Carte d'identité (Recto)",
+  id_card_verso: "Carte d'identité (Verso)",
+  proof_of_address: 'Justificatif de domicile',
+  insurance_certificate: "Attestation d'assurance",
+  other: 'Autre document',
+};
+
+const ALL_DOC_TYPES = Object.keys(DOC_TYPE_LABELS);
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -129,6 +188,54 @@ export default function ClientFolderPage({ params }: PageProps) {
   // Tracks the last logistics tab that was activated (enables passive remote scanning without opening modal)
   const [activeLogisticsQuoteId, setActiveLogisticsQuoteId] = useState<string | null>(null);
 
+  const fetchInspections = async (quoteId: string) => {
+    try {
+      const res = await fetch(`/api/admin/inspections/${quoteId}`);
+      const data = await res.json();
+      if (data.success) {
+        setInspections(prev => ({ ...prev, [quoteId]: data.inspections }));
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleSendInspection = async (quoteId: string) => {
+    const type = inspectionType[quoteId] ?? 'DEPART';
+    const photos = inspectionPhotos[quoteId] ?? [];
+    const signature = inspectionSignature[quoteId] ?? '';
+
+    if (!signature) {
+      alert('Veuillez apposer votre signature avant d\'envoyer.');
+      return;
+    }
+
+    setInspectionLoading(quoteId);
+    try {
+      const formData = new FormData();
+      formData.append('quoteId', quoteId);
+      formData.append('type', type);
+      formData.append('adminSignature', signature);
+      for (const photo of photos) {
+        formData.append('photos', photo);
+      }
+      const res = await fetch('/api/admin/inspections', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (data.success) {
+        setInspectionPhotos(prev => ({ ...prev, [quoteId]: [] }));
+        setInspectionSignature(prev => ({ ...prev, [quoteId]: '' }));
+        setShowInspectionForm(prev => ({ ...prev, [quoteId]: false }));
+        await fetchInspections(quoteId);
+      } else {
+        alert(data.error || 'Erreur lors de la création de l\'état des lieux.');
+      }
+    } catch {
+      alert('Erreur réseau.');
+    } finally {
+      setInspectionLoading(null);
+    }
+  };
+
   const fetchLogistics = async (quoteId: string) => {
     setLoadingLogistics(prev => ({ ...prev, [quoteId]: true }));
     try {
@@ -148,6 +255,7 @@ export default function ClientFolderPage({ params }: PageProps) {
     setProjectTabs(prev => ({ ...prev, [projectId]: tab }));
     if (tab === 'logistics' && devisId) {
       fetchLogistics(devisId);
+      fetchInspections(devisId);
       setActiveLogisticsQuoteId(devisId);
     } else if (tab === 'docs') {
       setActiveLogisticsQuoteId(prev => (prev === devisId ? null : prev));
@@ -215,6 +323,23 @@ export default function ClientFolderPage({ params }: PageProps) {
   const [cancelReason, setCancelReason] = useState('');
   const [cancelLoading, setCancelLoading] = useState(false);
 
+  // Inspection (état des lieux) states
+  const [inspections, setInspections] = useState<Record<string, Inspection[]>>({});
+  const [showInspectionForm, setShowInspectionForm] = useState<Record<string, boolean>>({});
+  const [inspectionType, setInspectionType] = useState<Record<string, 'DEPART' | 'RETOUR'>>({});
+  const [inspectionPhotos, setInspectionPhotos] = useState<Record<string, File[]>>({});
+  const [inspectionSignature, setInspectionSignature] = useState<Record<string, string>>({});
+  const [inspectionLoading, setInspectionLoading] = useState<string | null>(null);
+  const [inspectionLightbox, setInspectionLightbox] = useState<string | null>(null);
+
+  // Document management
+  const [docRequests, setDocRequests] = useState<DocumentRequest[]>([]);
+  const [clientDocs, setClientDocs] = useState<CustomerDocument[]>([]);
+  const [docSectionLoading, setDocSectionLoading] = useState(false);
+  const [showDocModal, setShowDocModal] = useState(false);
+  const [selectedDocTypes, setSelectedDocTypes] = useState<string[]>([]);
+  const [docRequestLoading, setDocRequestLoading] = useState(false);
+
   // Security check on load
   useEffect(() => {
     if (!isPending && (!session || (session.user as any).role !== 'admin')) {
@@ -226,6 +351,7 @@ export default function ClientFolderPage({ params }: PageProps) {
   useEffect(() => {
     if (session && (session.user as any).role === 'admin') {
       fetchClientData();
+      fetchDocuments(clientId);
     }
   }, [session, clientId]);
 
@@ -309,6 +435,64 @@ export default function ClientFolderPage({ params }: PageProps) {
       console.error('Error fetching client dossier data:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchDocuments = async (id: string) => {
+    setDocSectionLoading(true);
+    try {
+      const res = await fetch(`/api/admin/document-requests/${id}`);
+      const data = await res.json();
+      if (data.success) {
+        setDocRequests(data.requests);
+        setClientDocs(data.documents);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setDocSectionLoading(false);
+    }
+  };
+
+  const handleSendDocRequest = async () => {
+    if (!selectedDocTypes.length) return;
+    setDocRequestLoading(true);
+    try {
+      const res = await fetch('/api/admin/document-requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customerId: clientId, requestedTypes: selectedDocTypes }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setShowDocModal(false);
+        setSelectedDocTypes([]);
+        fetchDocuments(clientId);
+      } else {
+        alert(data.error || 'Erreur lors de l\'envoi de la demande.');
+      }
+    } catch {
+      alert('Erreur réseau.');
+    } finally {
+      setDocRequestLoading(false);
+    }
+  };
+
+  const handleViewDocument = async (filePath: string) => {
+    try {
+      const res = await fetch('/api/admin/documents/signed-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filePath }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+      } else {
+        alert('Impossible de générer l\'URL de visualisation.');
+      }
+    } catch {
+      alert('Erreur réseau.');
     }
   };
 
@@ -420,6 +604,26 @@ export default function ClientFolderPage({ params }: PageProps) {
     } catch (e) {
       console.error(e);
       alert('Erreur.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleMarkCash = async (quoteId: string) => {
+    if (!window.confirm(`Confirmer le paiement en espèces pour #${quoteId} ?`)) return;
+    setActionLoading(quoteId + '-cash');
+    try {
+      const res = await fetch('/api/admin/invoices/mark-cash', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quoteId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchClientData();
+      } else {
+        alert(data.error || 'Erreur lors de la mise à jour.');
+      }
     } finally {
       setActionLoading(null);
     }
@@ -717,6 +921,79 @@ export default function ClientFolderPage({ params }: PageProps) {
           </span>
         </div>
 
+        {/* ── Documents Administratifs ─────────────────────────────── */}
+        {(() => {
+          const pendingRequest = docRequests.find(r => r.status === 'PENDING' && new Date(r.expiresAt) > new Date());
+          const hasDocuments = clientDocs.length > 0;
+
+          return (
+            <div style={{ backgroundColor: '#ffffff', border: '1px solid rgba(0,0,0,.08)', borderRadius: '24px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,.02)' }}>
+              <div style={{ padding: '20px 26px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', borderBottom: '1px solid rgba(0,0,0,.06)' }}>
+                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ width: '36px', height: '36px', borderRadius: '10px', backgroundColor: '#e8f1fd', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <FolderOpen style={{ width: '18px', height: '18px', color: '#0071e3' }} />
+                  </div>
+                  Documents administratifs
+                </h3>
+                {!pendingRequest && !hasDocuments && !docSectionLoading && (
+                  <button
+                    onClick={() => setShowDocModal(true)}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 16px', borderRadius: '980px', backgroundColor: '#0071e3', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '13px', fontFamily: 'inherit' }}
+                  >
+                    <Plus style={{ width: '14px', height: '14px' }} /> Demander des documents
+                  </button>
+                )}
+              </div>
+
+              <div style={{ padding: '20px 26px' }}>
+                {docSectionLoading ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#86868b', fontSize: '13px' }}>
+                    <Loader2 style={{ width: '14px', height: '14px', animation: 'spin 1s linear infinite' }} /> Chargement…
+                  </div>
+                ) : hasDocuments ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                      <FileCheck2 style={{ width: '14px', height: '14px', color: '#15803d' }} />
+                      <span style={{ fontSize: '13px', fontWeight: 700, color: '#15803d' }}>{clientDocs.length} document{clientDocs.length > 1 ? 's' : ''} reçu{clientDocs.length > 1 ? 's' : ''}</span>
+                    </div>
+                    {clientDocs.map(doc => (
+                      <div key={doc.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderRadius: '12px', backgroundColor: '#f5f5f7', gap: '12px' }}>
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: '13px', color: '#1d1d1f' }}>{DOC_TYPE_LABELS[doc.documentType] ?? doc.documentType}</div>
+                          <div style={{ fontSize: '11px', color: '#86868b', marginTop: '2px' }}>
+                            Reçu le {new Date(doc.uploadedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleViewDocument(doc.filePath)}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '7px 14px', borderRadius: '980px', backgroundColor: '#e8f1fd', color: '#0071e3', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '12px', fontFamily: 'inherit', flexShrink: 0 }}
+                        >
+                          <Eye style={{ width: '12px', height: '12px' }} /> Visualiser
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : pendingRequest ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 18px', borderRadius: '14px', backgroundColor: '#fff3cd', border: '1px solid rgba(217,119,6,.2)' }}>
+                    <Clock style={{ width: '18px', height: '18px', color: '#d97706', flexShrink: 0 }} />
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: '13px', color: '#92400e' }}>En attente des documents du client</div>
+                      <div style={{ fontSize: '12px', color: '#b45309', marginTop: '2px' }}>
+                        Lien envoyé — expire le {new Date(pendingRequest.expiresAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                        {' · '}Documents demandés : {(JSON.parse(pendingRequest.requestedTypes) as string[]).map(t => DOC_TYPE_LABELS[t] ?? t).join(', ')}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ color: '#86868b', fontSize: '13px' }}>
+                    Aucun document administratif n'a encore été demandé ou reçu pour ce client.
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Projects list */}
         {projects.length === 0 ? (
           <div style={{ backgroundColor: '#ffffff', border: '1px solid rgba(0,0,0,.08)', borderRadius: '24px', padding: '60px 20px', textAlign: 'center', color: '#86868b', fontSize: '14px' }}>
@@ -739,8 +1016,8 @@ export default function ClientFolderPage({ params }: PageProps) {
               (q: any) => q.status === 'pending' || q.status === 'modified_by_admin' || q.status === 'pdf_pending'
             ).length;
 
-            const devisDoc = project.quotes.find(q => q.docType === 'devis');
-            const isLogisticsEligible = devisDoc && (devisDoc.status === 'validated' || devisDoc.status === 'locked');
+            const devisDoc = project.quotes.find(q => q.docType === 'devis' && (q.status === 'validated' || q.status === 'locked'));
+            const isLogisticsEligible = !!devisDoc;
 
             return (
               <div key={project.id} style={{ backgroundColor: '#ffffff', border: '1px solid rgba(0,0,0,.08)', borderRadius: '24px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,.02)' }}>
@@ -800,7 +1077,7 @@ export default function ClientFolderPage({ params }: PageProps) {
                     </button>
                     <button
                       onClick={() => {
-                        const devis = project.quotes.find(q => q.docType === 'devis');
+                        const devis = project.quotes.find(q => q.docType === 'devis' && (q.status === 'validated' || q.status === 'locked'));
                         handleSwitchTab(project.id, 'logistics', devis?.id);
                       }}
                       style={{
@@ -823,7 +1100,7 @@ export default function ClientFolderPage({ params }: PageProps) {
                 {!isCollapsed && (
                   <div style={{ padding: '24px 26px', display: 'flex', flexDirection: 'column', gap: '28px' }}>
                     {projectTabs[project.id] === 'logistics' ? (() => {
-                      const devis = project.quotes.find(q => q.docType === 'devis');
+                      const devis = project.quotes.find(q => q.docType === 'devis' && (q.status === 'validated' || q.status === 'locked'));
                       if (!devis) {
                         return (
                           <div style={{ padding: '30px', textAlign: 'center', color: '#86868b' }}>
@@ -1005,6 +1282,214 @@ export default function ClientFolderPage({ params }: PageProps) {
                                 );
                               })}
                             </div>
+                          </div>
+
+                          {/* ── États des lieux ───────────────────────────────────────── */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '12px', borderBottom: '1px solid rgba(0,0,0,.06)' }}>
+                              <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <ClipboardList style={{ width: '16px', height: '16px', color: '#0071e3' }} />
+                                États des lieux
+                              </h4>
+                              <button
+                                onClick={() => setShowInspectionForm(prev => ({ ...prev, [devis.id]: !prev[devis.id] }))}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '980px', backgroundColor: showInspectionForm[devis.id] ? '#f5f5f7' : '#0071e3', color: showInspectionForm[devis.id] ? '#1d1d1f' : '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '12px', fontFamily: 'inherit' }}
+                              >
+                                <Plus style={{ width: '13px', height: '13px' }} />
+                                {showInspectionForm[devis.id] ? 'Annuler' : 'Créer un état des lieux'}
+                              </button>
+                            </div>
+
+                            {/* Existing inspections */}
+                            {(inspections[devis.id] ?? []).map(insp => {
+                              const fmtDT = (d: string) => new Date(d).toLocaleString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+                              return (
+                                <div key={insp.id} style={{ border: `1px solid ${insp.status === 'COMPLETED' ? 'rgba(21,128,61,.2)' : 'rgba(0,113,227,.2)'}`, borderRadius: '16px', padding: '18px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                      <span style={{ fontSize: '12px', fontWeight: 800, padding: '3px 10px', borderRadius: '980px', backgroundColor: insp.type === 'DEPART' ? '#e8f1fd' : '#dcfce7', color: insp.type === 'DEPART' ? '#0071e3' : '#15803d' }}>
+                                        {insp.type === 'DEPART' ? '📦 Départ' : '🚛 Retour'}
+                                      </span>
+                                      <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '980px', backgroundColor: insp.status === 'COMPLETED' ? '#e2fbe8' : '#fff3cd', color: insp.status === 'COMPLETED' ? '#15803d' : '#d97706' }}>
+                                        {insp.status === 'COMPLETED' ? '✓ Signé' : 'En attente client'}
+                                      </span>
+                                    </div>
+                                    <span style={{ fontSize: '11px', color: '#86868b' }}>{fmtDT(insp.createdAt)}</span>
+                                  </div>
+
+                                  {/* Photos thumbnails */}
+                                  {insp.photoUrls.length > 0 && (
+                                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                      {insp.photoUrls.map((url, i) => (
+                                        <div key={i} onClick={() => setInspectionLightbox(url)} style={{ width: '60px', height: '60px', borderRadius: '8px', overflow: 'hidden', cursor: 'pointer', border: '1px solid rgba(0,0,0,.08)', flexShrink: 0 }}>
+                                          <img src={url} alt={`Photo ${i + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+
+                                  {/* Signatures côte à côte */}
+                                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                    <div>
+                                      <p style={{ margin: '0 0 6px', fontSize: '10px', fontWeight: 700, color: '#86868b', textTransform: 'uppercase', letterSpacing: '.06em' }}>Signature Admin</p>
+                                      <img src={insp.adminSignature} alt="Signature admin" style={{ width: '100%', borderRadius: '8px', border: '1px solid rgba(0,0,0,.08)', backgroundColor: '#fafaf9' }} />
+                                      <p style={{ margin: '4px 0 0', fontSize: '10px', color: '#86868b' }}>{fmtDT(insp.adminSignedAt)}</p>
+                                    </div>
+                                    <div>
+                                      <p style={{ margin: '0 0 6px', fontSize: '10px', fontWeight: 700, color: '#86868b', textTransform: 'uppercase', letterSpacing: '.06em' }}>Signature Client</p>
+                                      {insp.clientSignature ? (
+                                        <>
+                                          <img src={insp.clientSignature} alt="Signature client" style={{ width: '100%', borderRadius: '8px', border: '1px solid rgba(0,0,0,.08)', backgroundColor: '#fafaf9' }} />
+                                          <p style={{ margin: '4px 0 0', fontSize: '10px', color: '#15803d', fontWeight: 600 }}>{fmtDT(insp.clientSignedAt!)}</p>
+                                        </>
+                                      ) : (
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60px', borderRadius: '8px', border: '1px dashed rgba(0,0,0,.12)', backgroundColor: '#fafaf9' }}>
+                                          <span style={{ fontSize: '11px', color: '#c7c7cc', fontStyle: 'italic' }}>En attente de la signature client…</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Certificat de Validation Juridique (COMPLETED seulement) */}
+                                  {insp.status === 'COMPLETED' && (
+                                    <div style={{ borderRadius: '12px', border: '1px solid rgba(21,128,61,.25)', backgroundColor: '#f0fdf4', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+                                        <ShieldCheck style={{ width: '14px', height: '14px', color: '#15803d', flexShrink: 0 }} />
+                                        <span style={{ fontSize: '10px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.08em', color: '#15803d' }}>
+                                          Certificat de Validation Juridique
+                                        </span>
+                                      </div>
+                                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px', fontSize: '11px', color: '#1d1d1f' }}>
+                                        <div>
+                                          <span style={{ color: '#6e6e73', display: 'block', marginBottom: '1px', fontSize: '10px' }}>Statut</span>
+                                          <strong style={{ color: '#15803d' }}>✓ Validé et signé numériquement</strong>
+                                        </div>
+                                        <div>
+                                          <span style={{ color: '#6e6e73', display: 'block', marginBottom: '1px', fontSize: '10px' }}>Date et heure (horodatage)</span>
+                                          <strong>{insp.clientSignedAt ? new Date(insp.clientSignedAt).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—'}</strong>
+                                        </div>
+                                        <div>
+                                          <span style={{ color: '#6e6e73', display: 'block', marginBottom: '1px', fontSize: '10px' }}>Compte utilisateur</span>
+                                          <strong>{insp.clientName ?? '—'}</strong>
+                                          {insp.clientEmail && <span style={{ display: 'block', color: '#6e6e73', fontFamily: 'monospace', fontSize: '10px' }}>{insp.clientEmail}</span>}
+                                        </div>
+                                        <div>
+                                          <span style={{ color: '#6e6e73', display: 'block', marginBottom: '1px', fontSize: '10px' }}>Adresse IP</span>
+                                          <strong style={{ fontFamily: 'monospace' }}>{insp.clientIp ?? '—'}</strong>
+                                        </div>
+                                        <div>
+                                          <span style={{ color: '#6e6e73', display: 'block', marginBottom: '1px', fontSize: '10px' }}>Localisation estimée</span>
+                                          <strong>{insp.clientGeoLocation ?? '—'}</strong>
+                                        </div>
+                                        <div>
+                                          <span style={{ color: '#6e6e73', display: 'block', marginBottom: '1px', fontSize: '10px' }}>Appareil utilisé</span>
+                                          <strong>{insp.clientDevice ?? '—'}</strong>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+
+                            {(inspections[devis.id] ?? []).length === 0 && !showInspectionForm[devis.id] && (
+                              <div style={{ padding: '20px', textAlign: 'center', borderRadius: '14px', border: '1px dashed rgba(0,0,0,.12)', color: '#86868b', fontSize: '13px' }}>
+                                Aucun état des lieux créé pour ce projet.
+                              </div>
+                            )}
+
+                            {/* New inspection form */}
+                            {showInspectionForm[devis.id] && (
+                              <div style={{ border: '2px solid #0071e3', borderRadius: '18px', padding: '22px', display: 'flex', flexDirection: 'column', gap: '18px', backgroundColor: '#fafcff' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <PenLine style={{ width: '16px', height: '16px', color: '#0071e3' }} />
+                                  <span style={{ fontWeight: 800, fontSize: '14px', color: '#0071e3' }}>Nouvel état des lieux</span>
+                                </div>
+
+                                {/* Type selector */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                  <label style={{ fontSize: '12px', fontWeight: 700, color: '#1d1d1f' }}>Type d'état des lieux</label>
+                                  <div style={{ display: 'flex', backgroundColor: 'rgba(0,0,0,0.05)', padding: '3px', borderRadius: '980px', width: 'fit-content' }}>
+                                    {(['DEPART', 'RETOUR'] as const).map(t => (
+                                      <button
+                                        key={t}
+                                        type="button"
+                                        onClick={() => setInspectionType(prev => ({ ...prev, [devis.id]: t }))}
+                                        style={{ padding: '7px 18px', borderRadius: '980px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: 700, fontFamily: 'inherit', transition: 'all 0.2s', backgroundColor: (inspectionType[devis.id] ?? 'DEPART') === t ? '#1d1d1f' : 'transparent', color: (inspectionType[devis.id] ?? 'DEPART') === t ? '#fff' : '#6e6e73' }}
+                                      >
+                                        {t === 'DEPART' ? '📦 Départ' : '🚛 Retour'}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+
+                                {/* Photo upload */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                  <label style={{ fontSize: '12px', fontWeight: 700, color: '#1d1d1f', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <FileImage style={{ width: '13px', height: '13px' }} />
+                                    Photos du matériel (max 10)
+                                  </label>
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    multiple
+                                    onChange={e => {
+                                      const files = Array.from(e.target.files ?? []).slice(0, 10);
+                                      setInspectionPhotos(prev => ({ ...prev, [devis.id]: files }));
+                                    }}
+                                    style={{ fontSize: '12px', cursor: 'pointer', fontFamily: 'inherit' }}
+                                  />
+                                  {(inspectionPhotos[devis.id] ?? []).length > 0 && (
+                                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
+                                      {(inspectionPhotos[devis.id] ?? []).map((f, i) => (
+                                        <div key={i} style={{ width: '52px', height: '52px', borderRadius: '8px', overflow: 'hidden', border: '1px solid rgba(0,0,0,.1)', flexShrink: 0 }}>
+                                          <img src={URL.createObjectURL(f)} alt={f.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Admin signature */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                  <label style={{ fontSize: '12px', fontWeight: 700, color: '#1d1d1f', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <PenLine style={{ width: '13px', height: '13px' }} />
+                                    Votre signature (Admin)
+                                  </label>
+                                  <SignaturePad
+                                    onChange={sig => setInspectionSignature(prev => ({ ...prev, [devis.id]: sig }))}
+                                  />
+                                </div>
+
+                                {/* Send button */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleSendInspection(devis.id)}
+                                  disabled={!inspectionSignature[devis.id] || inspectionLoading === devis.id}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '8px',
+                                    padding: '12px 24px',
+                                    borderRadius: '12px',
+                                    backgroundColor: inspectionSignature[devis.id] && inspectionLoading !== devis.id ? '#0071e3' : '#c7c7cc',
+                                    color: '#fff',
+                                    border: 'none',
+                                    cursor: inspectionSignature[devis.id] && inspectionLoading !== devis.id ? 'pointer' : 'default',
+                                    fontWeight: 700,
+                                    fontSize: '13px',
+                                    fontFamily: 'inherit',
+                                    transition: 'background 0.2s',
+                                  }}
+                                >
+                                  {inspectionLoading === devis.id
+                                    ? <><Loader2 style={{ width: '14px', height: '14px', animation: 'spin 1s linear infinite' }} /> Envoi en cours…</>
+                                    : <><Send style={{ width: '14px', height: '14px' }} /> Envoyer la demande de signature au client</>
+                                  }
+                                </button>
+                              </div>
+                            )}
                           </div>
 
                         </div>
@@ -1214,9 +1699,6 @@ export default function ClientFolderPage({ params }: PageProps) {
                                                 </button>
                                               )}
                                               {hasFacture && <span style={{ fontSize: '12px', color: '#15803d', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}><CheckCircle style={{ width: '12px', height: '12px' }} /> Facture créée</span>}
-                                              <button onClick={() => handleLockDevis(q.id)} disabled={actionLoading === q.id + '-lock'} style={{ padding: '7px 14px', borderRadius: '980px', backgroundColor: '#1db954', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                                                {actionLoading === q.id + '-lock' ? <Loader2 style={{ width: '11px', height: '11px', animation: 'spin 1s linear infinite' }} /> : <Lock style={{ width: '11px', height: '11px' }} />} Règlement reçu
-                                              </button>
                                               <button onClick={() => { setCancellingQuoteId(q.id); setCancelReason(''); }} style={{ padding: '7px 12px', borderRadius: '980px', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid rgba(239,68,68,.4)', cursor: 'pointer', fontWeight: 600, fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                                                 <Ban style={{ width: '11px', height: '11px' }} /> Annuler la location
                                               </button>
@@ -1429,7 +1911,19 @@ export default function ClientFolderPage({ params }: PageProps) {
                                       <span style={{ fontSize: '10px', fontWeight: 700, color: '#3c3c43', textTransform: 'uppercase' as const, letterSpacing: '.06em' }}>Activité de paiement</span>
                                     </div>
 
-                                    {q.invoiceStripePaymentIntentId ? (
+                                    {q.invoicePaymentStatus === 'CASH' ? (
+                                      <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                        <Banknote style={{ width: '16px', height: '16px', color: '#15803d', flexShrink: 0 }} />
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                          <div style={{ fontSize: '12px', fontWeight: 700, color: '#15803d' }}>
+                                            Paiement en espèces — Réglé ✓
+                                          </div>
+                                          <div style={{ fontSize: '10px', color: '#86868b', marginTop: '2px' }}>
+                                            Enregistré manuellement par l'administrateur
+                                          </div>
+                                        </div>
+                                      </div>
+                                    ) : q.invoiceStripePaymentIntentId ? (
                                       <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '10px' }}>
                                         {q.invoicePaymentStatus === 'SUCCEEDED'
                                           ? <CheckCircle2 style={{ width: '16px', height: '16px', color: '#15803d', flexShrink: 0 }} />
@@ -1459,6 +1953,23 @@ export default function ClientFolderPage({ params }: PageProps) {
                                       <div style={{ padding: '10px 14px', fontSize: '12px', color: '#86868b', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: '7px' }}>
                                         <Clock style={{ width: '13px', height: '13px', flexShrink: 0 }} />
                                         Aucune tentative de paiement en ligne enregistrée.
+                                      </div>
+                                    )}
+
+                                    {/* Bouton paiement en espèces — visible tant que non réglé */}
+                                    {q.invoicePaymentStatus !== 'SUCCEEDED' && q.invoicePaymentStatus !== 'CASH' && (
+                                      <div style={{ padding: '8px 14px', borderTop: '1px solid rgba(0,0,0,.05)', backgroundColor: '#fafafa' }}>
+                                        <button
+                                          onClick={() => handleMarkCash(q.id)}
+                                          disabled={actionLoading === q.id + '-cash'}
+                                          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '980px', backgroundColor: 'transparent', color: '#15803d', border: '1px solid rgba(21,128,61,.3)', cursor: 'pointer', fontWeight: 700, fontSize: '11px' }}
+                                        >
+                                          {actionLoading === q.id + '-cash'
+                                            ? <Loader2 style={{ width: '11px', height: '11px', animation: 'spin 1s linear infinite' }} />
+                                            : <Banknote style={{ width: '11px', height: '11px' }} />
+                                          }
+                                          Marquer payé en espèces
+                                        </button>
                                       </div>
                                     )}
 
@@ -1635,6 +2146,77 @@ export default function ClientFolderPage({ params }: PageProps) {
         </div>
       )}
 
+      {/* Document Request Modal */}
+      {showDocModal && (
+        <div
+          style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9000, padding: '20px' }}
+          onClick={e => { if (e.target === e.currentTarget) { setShowDocModal(false); setSelectedDocTypes([]); } }}
+        >
+          <div style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '28px', width: '100%', maxWidth: '440px', boxShadow: '0 24px 60px rgba(0,0,0,0.2)', fontFamily: 'var(--font-hanken-grotesk), -apple-system, sans-serif' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 42, height: 42, borderRadius: 12, backgroundColor: '#e8f1fd', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <FolderOpen style={{ width: 20, height: 20, color: '#0071e3' }} />
+                </div>
+                <div>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: '#1d1d1f' }}>Demander des documents</div>
+                  <div style={{ fontSize: 12, color: '#86868b', marginTop: 2 }}>{client?.name}</div>
+                </div>
+              </div>
+              <button
+                onClick={() => { setShowDocModal(false); setSelectedDocTypes([]); }}
+                style={{ padding: 6, borderRadius: 8, border: '1px solid rgba(0,0,0,.1)', backgroundColor: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#86868b' }}
+              >
+                <X style={{ width: 16, height: 16 }} />
+              </button>
+            </div>
+
+            <p style={{ fontSize: 13, color: '#6e6e73', margin: '0 0 18px', lineHeight: 1.6 }}>
+              Sélectionnez les pièces à demander. Un email avec un lien sécurisé sera envoyé au client.
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
+              {ALL_DOC_TYPES.map(type => {
+                const checked = selectedDocTypes.includes(type);
+                return (
+                  <label key={type} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 12, border: `1px solid ${checked ? '#0071e3' : 'rgba(0,0,0,.1)'}`, backgroundColor: checked ? '#f0f7ff' : '#fafafa', cursor: 'pointer', transition: 'all 0.15s' }}>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={e => setSelectedDocTypes(prev => e.target.checked ? [...prev, type] : prev.filter(t => t !== type))}
+                      style={{ width: 16, height: 16, accentColor: '#0071e3', cursor: 'pointer', flexShrink: 0 }}
+                    />
+                    <span style={{ fontSize: 14, fontWeight: checked ? 700 : 500, color: checked ? '#0071e3' : '#1d1d1f' }}>
+                      {DOC_TYPE_LABELS[type]}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => { setShowDocModal(false); setSelectedDocTypes([]); }}
+                disabled={docRequestLoading}
+                style={{ padding: '10px 18px', borderRadius: 980, backgroundColor: '#f5f5f7', color: '#1d1d1f', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 13, fontFamily: 'inherit' }}
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleSendDocRequest}
+                disabled={docRequestLoading || !selectedDocTypes.length}
+                style={{ padding: '10px 20px', borderRadius: 980, backgroundColor: docRequestLoading || !selectedDocTypes.length ? '#86868b' : '#0071e3', color: '#fff', border: 'none', cursor: docRequestLoading || !selectedDocTypes.length ? 'default' : 'pointer', fontWeight: 700, fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 7, fontFamily: 'inherit', transition: 'background 0.2s' }}
+              >
+                {docRequestLoading
+                  ? <><Loader2 style={{ width: 14, height: 14, animation: 'spin 1s linear infinite' }} /> Envoi…</>
+                  : <><Send style={{ width: 14, height: 14 }} /> Envoyer la demande</>
+                }
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Logistics Scanner Modal */}
       <ScannerModal
         isOpen={isLogisticsScannerOpen}
@@ -1642,6 +2224,21 @@ export default function ClientFolderPage({ params }: PageProps) {
         onScanSuccess={handleLogisticsScanSuccess}
         title="Scanner matériel logistique"
       />
+
+      {/* Inspection photo lightbox */}
+      {inspectionLightbox && (
+        <div
+          onClick={() => setInspectionLightbox(null)}
+          style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,.85)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', cursor: 'zoom-out' }}
+        >
+          <img
+            src={inspectionLightbox}
+            alt="Photo agrandie"
+            onClick={e => e.stopPropagation()}
+            style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain', borderRadius: '12px', cursor: 'default' }}
+          />
+        </div>
+      )}
 
       <Footer />
     </div>

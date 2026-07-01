@@ -5,7 +5,13 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { authClient } from '@/lib/auth-client';
 
-export default function UserNav() {
+interface UserNavProps {
+  /** 'inline' renders a static, non-floating menu — used inside the mobile drawer where an
+   * absolutely-positioned dropdown would overflow the narrow, left-aligned trigger. */
+  variant?: 'dropdown' | 'inline';
+}
+
+export default function UserNav({ variant = 'dropdown' }: UserNavProps) {
   const { data: session, isPending } = authClient.useSession();
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -29,6 +35,13 @@ export default function UserNav() {
   }
 
   if (!session) {
+    if (variant === 'inline') {
+      return (
+        <Link href="/auth/sign-in" style={{ color: '#1d1d1f', textDecoration: 'none', fontSize: '16px', fontWeight: 500, padding: '13px 4px', display: 'block' }}>
+          Connexion
+        </Link>
+      );
+    }
     return (
       <Link href="/auth/sign-in" style={{ color: 'inherit', textDecoration: 'none', opacity: .78, transition: 'opacity .2s', fontSize: '14px', fontWeight: 500 }}>
         Connexion
@@ -53,6 +66,31 @@ export default function UserNav() {
       console.error('Error signing out:', error);
     }
   };
+
+  if (variant === 'inline') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+        <div style={{ padding: '4px 4px 12px' }}>
+          <div style={{ fontWeight: 700, fontSize: '15px', color: '#1d1d1f' }}>{user.name}</div>
+          <div style={{ fontSize: '12px', color: '#86868b' }}>{user.email}</div>
+        </div>
+        <Link href="/profil" style={{ color: '#1d1d1f', textDecoration: 'none', fontSize: '16px', fontWeight: 500, padding: '13px 4px', borderBottom: '1px solid rgba(0,0,0,.05)', display: 'block' }}>
+          Mon Espace Profil
+        </Link>
+        {isAdmin && (
+          <Link href="/admin" style={{ color: '#ef4444', textDecoration: 'none', fontSize: '16px', fontWeight: 600, padding: '13px 4px', borderBottom: '1px solid rgba(0,0,0,.05)', display: 'block' }}>
+            Administration
+          </Link>
+        )}
+        <button
+          onClick={handleSignOut}
+          style={{ textAlign: 'left', color: '#86868b', background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', fontWeight: 500, padding: '13px 4px', fontFamily: 'inherit' }}
+        >
+          Se déconnecter
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div ref={dropdownRef} style={{ position: 'relative', display: 'inline-block' }}>

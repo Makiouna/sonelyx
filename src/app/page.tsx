@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import UserNav from '@/components/user-nav';
 import Header from '@/components/header';
 import Footer from '@/components/footer';
 import { Loader2 } from 'lucide-react';
@@ -20,6 +19,7 @@ interface EquipmentItem {
   priceType: 'numeric' | 'on_request';
   priceTax: 'HT' | 'TTC';
   image: string | null;
+  quantity: number;
 }
 
 interface CategoryItem {
@@ -27,9 +27,47 @@ interface CategoryItem {
   label: string;
 }
 
+const NAV_LINKS = [
+  { label: 'Accueil', href: '/' },
+  { label: 'Le parc', href: '#parc' },
+  { label: 'Méthode', href: '#process' },
+  { label: 'Boutique', href: '/location/catalogue' },
+];
+
+const stats = [
+  { big: '24/7', label: 'Assistance permanente, sur site et à distance.', rule: 'none' },
+  { big: '100%', label: 'Matériel testé, étiqueté et calibré avant départ.', rule: '1px solid rgba(0,0,0,.12)' },
+  { big: '<24h', label: 'Délai de réponse pour un devis sur-mesure.', rule: '1px solid rgba(0,0,0,.12)' },
+];
+
+const features = [
+  { title: 'Assistance 24/7', desc: 'Techniciens disponibles en amont et pendant l’événement, en cas d’urgence.' },
+  { title: 'Matériel calibré', desc: 'Chaque équipement est testé, étiqueté et garanti opérationnel.' },
+  { title: 'Son & light design', desc: 'Une conception sur-mesure, pensée pour votre lieu et votre public.' },
+  { title: 'Devis transparent', desc: 'Un tarif clair sous 24h, sans surprise et sans frais cachés.' },
+];
+
+const processSteps = [
+  { no: '01', title: 'Choisir', desc: 'Parcourez le parc et composez votre sélection de matériel.' },
+  { no: '02', title: 'Réserver', desc: 'Ajoutez au devis et précisez vos dates et votre lieu.' },
+  { no: '03', title: 'Devis 24h', desc: 'Nous étudions la faisabilité et renvoyons un tarif sur-mesure.' },
+  { no: '04', title: 'Confirmé', desc: 'Livraison, installation et exploitation par nos équipes.' },
+];
+
+const commitments = [
+  'Des équipes certifiées et des procédures de sécurité conformes.',
+  'Un matériel de secours et un remplacement rapide en cas d’incident.',
+  'Une assistance continue, du montage à l’extinction des feux.',
+];
+
+const perks = [
+  'Réponse et devis sur-mesure sous 24h.',
+  'Étude technique de votre événement offerte.',
+  'Livraison avec ou sans technicien, partout en région.',
+];
+
 export default function Home() {
   const [filter, setFilter] = useState('all');
-  const [active, setActive] = useState<string | null>(null);
   const [catalogue, setCatalogue] = useState<EquipmentItem[]>([]);
   const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,6 +82,32 @@ export default function Home() {
     } catch (e) {
       console.error(e);
     }
+  }, []);
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const [reqEquip, reqCats] = await Promise.all([
+          fetch('/api/equipment'),
+          fetch('/api/categories'),
+        ]);
+        const [dataEquip, dataCats] = await Promise.all([
+          reqEquip.json(),
+          reqCats.json(),
+        ]);
+        if (dataEquip.success) {
+          setCatalogue(dataEquip.items);
+        }
+        if (dataCats.success) {
+          setCategories(dataCats.categories);
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
   }, []);
 
   const persist = (next: Record<string, boolean>) => {
@@ -74,372 +138,292 @@ export default function Home() {
   const count = Object.keys(selected).length;
   const selectionLabel = `${count} article${count > 1 ? 's' : ''} sélectionné${count > 1 ? 's' : ''}`;
 
-  // Fetch dynamic catalogue and categories
-  useEffect(() => {
-    async function loadData() {
-      try {
-        const [reqEquip, reqCats] = await Promise.all([
-          fetch('/api/equipment'),
-          fetch('/api/categories')
-        ]);
-        const [dataEquip, dataCats] = await Promise.all([
-          reqEquip.json(),
-          reqCats.json()
-        ]);
-        if (dataEquip.success) {
-          setCatalogue(dataEquip.items);
-        }
-        if (dataCats.success) {
-          setCategories(dataCats.categories);
-        }
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadData();
-  }, []);
-
-  const trust = [
-    { tag: 'Support', big: '24/7', title: 'Assistance permanente', label: 'Sur site et à distance, en amont comme pendant l’événement.' },
-    { tag: 'Qualité', big: '100%', title: 'Matériel testé & calibré', label: 'Contrôlé, étiqueté et garanti opérationnel à chaque sortie.' },
-    { tag: 'Expertise', big: 'Certifiée', title: 'Direction technique', label: 'Régisseurs expérimentés, procédures de sécurité conformes.' },
-    { tag: 'Logistique', big: 'A→Z', title: 'Logistique intégrée', label: 'Transport, installation, exploitation et démontage inclus.' }
-  ];
-
-  const steps = [
-    { no: '01', title: 'Étude & repérage', desc: 'Analyse du lieu, des contraintes techniques et de vos objectifs.' },
-    { no: '02', title: 'Design & calibration', desc: 'Sound & light design, matériel sélectionné puis calibré en atelier.' },
-    { no: '03', title: 'Installation', desc: 'Montage, câblage et réglages réalisés par nos équipes sur site.' },
-    { no: '04', title: 'Exploitation & démontage', desc: 'Direction technique en direct, puis démontage et retour atelier.' }
-  ];
-
-  const items = catalogue.filter(e => filter === 'all' || e.cat === filter);
-
-  const filterDefs = [
-    { key: 'all', label: 'Tout' },
-    ...categories.map(c => ({ key: c.id, label: c.label }))
-  ];
-
-  const pillarDefs = [
-    {
-      key: 'presta', no: '01', tag: 'STUDIO TECHNIQUE', title: 'Prestation technique',
-      desc: 'Nous prenons la main sur toute la chaîne technique de votre événement, de l’étude préalable à l’exploitation en direct.',
-      feats: ['Sound & light design sur-mesure', 'Direction technique d’événement', 'Gestion complète : étude, install, exploitation']
-    },
-    {
-      key: 'loc', no: '02', tag: 'PARC MATÉRIEL', title: 'Location de matériel',
-      desc: 'Un parc professionnel premium, prêt à partir, testé et calibré, livré avec ou sans technicien.',
-      feats: ['Systèmes son line-array', 'Éclairages asservis & scéniques', 'Régies DJ professionnelles']
-    }
-  ];
+  const items = catalogue.filter((e) => filter === 'all' || e.cat === filter);
+  const filterDefs = [{ key: 'all', label: 'Tout' }, ...categories.map((c) => ({ key: c.id, label: c.label }))];
 
   return (
-    <div style={{ backgroundColor: '#ffffff', color: '#1d1d1f', fontFamily: 'var(--font-hanken-grotesk), sans-serif', WebkitFontSmoothing: 'antialiased', letterSpacing: '-.01em', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ backgroundColor: '#ffffff', color: '#0b0e14', fontFamily: 'var(--font-hanken-grotesk), sans-serif', WebkitFontSmoothing: 'antialiased', letterSpacing: '-.015em', minHeight: '100vh', display: 'flex', flexDirection: 'column', overflowX: 'hidden' }}>
 
-      <Header />
+      <Header links={NAV_LINKS} />
 
-      {/* ===== HERO ===== */}
-      <section style={{ textAlign: 'center', padding: 'clamp(70px,11vw,140px) clamp(20px,4vw,40px) clamp(40px,6vw,72px)' }}>
-        <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
-          <div style={{ fontSize: '15px', fontWeight: 600, color: '#0071e3', letterSpacing: 0, marginBottom: '22px' }}>Prestation technique &amp; location événementielle</div>
-          <h1 style={{ fontWeight: 800, fontSize: 'clamp(40px,7.4vw,88px)', lineHeight: 1.03, letterSpacing: '-.035em', margin: 0, textWrap: 'balance' }}>
-            La technique qui s'efface.<br />L'émotion qui s'impose.
-          </h1>
-          <p style={{ maxWidth: '600px', margin: '26px auto 0', fontSize: 'clamp(17px,1.8vw,22px)', lineHeight: 1.5, color: '#6e6e73', fontWeight: 400 }}>
-            Direction technique, sound &amp; light design et location de matériel professionnel pour les événements les plus exigeants.
-          </p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px 28px', justifyContent: 'center', alignItems: 'center', margin: '38px' }}>
-            <Link href="#contact" style={{ display: 'inline-flex', alignItems: 'center', padding: '14px 30px', borderRadius: '980px', backgroundColor: '#1d1d1f', color: '#fff', textDecoration: 'none', fontWeight: 600, fontSize: '16px', transition: 'background .25s, transform .15s' }}>
-              Demander un devis sur-mesure
+      {/* ===== HERO CARD ===== */}
+      <section style={{ maxWidth: '1280px', margin: '0 auto', padding: 'clamp(14px,2vw,22px) clamp(14px,2vw,22px) 0', width: '100%' }}>
+        <div className="hero-card" style={{ position: 'relative', borderRadius: '28px', overflow: 'hidden', minHeight: 'clamp(420px,58vh,600px)', backgroundColor: '#1d1d1f' }}>
+          <div style={{ position: 'absolute', inset: 0, backgroundImage: 'repeating-linear-gradient(135deg, rgba(255,255,255,.035) 0 1px, transparent 1px 16px)' }}></div>
+          <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse 70% 90% at 78% 20%, rgba(0,113,227,.28), transparent 60%)' }}></div>
+          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(100deg, rgba(11,14,20,.55) 0%, rgba(11,14,20,.2) 46%, rgba(11,14,20,.05) 78%)', pointerEvents: 'none' }}></div>
+
+          <div style={{ position: 'relative', zIndex: 3, padding: 'clamp(40px,6vw,72px) clamp(20px,3vw,44px) clamp(48px,7vw,80px)', maxWidth: '760px' }}>
+            <h1 style={{ fontWeight: 800, fontSize: 'clamp(36px,6vw,74px)', lineHeight: 1.02, letterSpacing: '-.03em', margin: 0, color: '#fff' }}>
+              Trouvez, réservez<br />&amp; équipez facilement.
+            </h1>
+            <p style={{ margin: '22px 0 0', maxWidth: '440px', fontSize: 'clamp(14px,1.5vw,17px)', lineHeight: 1.55, color: 'rgba(255,255,255,.72)' }}>
+              Un parc professionnel son, lumière et régie — testé, calibré et livré avec ou sans technicien pour vos événements.
+            </p>
+            <Link href="/location/catalogue" style={{ display: 'inline-flex', alignItems: 'center', gap: '12px', marginTop: '30px', padding: '8px 8px 8px 26px', borderRadius: '980px', backgroundColor: '#fff', color: '#0b0e14', textDecoration: 'none', fontWeight: 700, fontSize: '15px' }}>
+              Choisir mon matériel
+              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '38px', height: '38px', borderRadius: '50%', backgroundColor: '#0071e3', color: '#fff' }}>›</span>
             </Link>
-            <Link href="/location/catalogue" style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#0071e3', textDecoration: 'none', fontWeight: 600, fontSize: '16px' }}>
-              Explorer le parc matériel <span style={{ fontWeight: 400 }}>›</span>
-            </Link>
           </div>
         </div>
+        <style>{`
+          @media (max-width: 680px) {
+            .hero-card { min-height: auto !important; }
+          }
+        `}</style>
+      </section>
 
-        {/* hero visual */}
-        <div style={{ maxWidth: '1180px', margin: 'clamp(48px,6vw,80px) auto 0', padding: '0 clamp(20px,4vw,40px)' }}>
-          <div style={{ position: 'relative', borderRadius: '24px', overflow: 'hidden', aspectRatio: '21/9', backgroundColor: '#f5f5f7', border: '1px solid rgba(0,0,0,.05)' }}>
-            <div style={{ position: 'absolute', inset: 0, backgroundImage: 'repeating-linear-gradient(135deg, rgba(0,0,0,.025) 0 1px, transparent 1px 16px)' }}></div>
-            <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse 70% 90% at 50% 120%, rgba(0,113,227,.08), transparent 60%)' }}></div>
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 500, color: '#86868b', letterSpacing: '.04em' }}>[ visuel — scène / installation Sonelyx ]</div>
-          </div>
+      {/* ===== STATS ===== */}
+      <section style={{ maxWidth: '1280px', margin: '0 auto', padding: 'clamp(36px,5vw,64px) clamp(20px,3vw,40px)', width: '100%' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 'clamp(20px,3vw,10px)' }}>
+          {stats.map((s, i) => (
+            <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '0 clamp(10px,3vw,40px)', borderLeft: s.rule }}>
+              <div style={{ fontWeight: 800, fontSize: 'clamp(30px,3.6vw,46px)', letterSpacing: '-.03em' }}>{s.big}</div>
+              <div style={{ fontSize: '14px', color: '#6b6b73', lineHeight: 1.4, maxWidth: '22ch' }}>{s.label}</div>
+            </div>
+          ))}
         </div>
       </section>
 
-      {/* ===== TRUST / FIABILITÉ ===== */}
-      <section id="fiabilite" style={{ backgroundColor: '#f5f5f7', padding: 'clamp(70px,9vw,120px) clamp(20px,4vw,40px)' }}>
-        <div style={{ maxWidth: '1180px', margin: '0 auto' }}>
-          <div style={{ textAlign: 'center', maxWidth: '680px', margin: '0 auto clamp(44px,5vw,64px)' }}>
-            <div style={{ fontSize: '14px', fontWeight: 600, color: '#86868b', letterSpacing: '.02em', marginBottom: '16px' }}>FIABILITÉ</div>
-            <h2 style={{ fontWeight: 800, fontSize: 'clamp(30px,4.6vw,52px)', lineHeight: 1.06, letterSpacing: '-.03em', margin: 0 }}>La confiance, garantie par les détails.</h2>
-            <p style={{ margin: '18px auto 0', maxWidth: '520px', fontSize: '18px', lineHeight: 1.5, color: '#6e6e73' }}>Chaque équipement quitte l'atelier testé, étiqueté et opérationnel.</p>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(250px,1fr))', gap: '18px' }}>
-            {trust.map((t, i) => (
-              <div key={i} style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '34px 30px', minHeight: '230px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', border: '1px solid rgba(0,0,0,.04)' }}>
-                <div style={{ fontSize: '14px', fontWeight: 600, color: '#0071e3' }}>{t.tag}</div>
-                <div>
-                  <div style={{ fontWeight: 800, fontSize: '46px', lineHeight: 1, letterSpacing: '-.03em', marginBottom: '12px' }}>{t.big}</div>
-                  <div style={{ fontSize: '16px', fontWeight: 600, marginBottom: '6px' }}>{t.title}</div>
-                  <div style={{ fontSize: '14px', color: '#6e6e73', lineHeight: 1.5 }}>{t.label}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ===== DEUX PILIERS ===== */}
-      <section id="metiers" style={{ backgroundColor: '#fff', padding: 'clamp(70px,9vw,120px) clamp(20px,4vw,40px)' }}>
-        <div style={{ maxWidth: '1180px', margin: '0 auto' }}>
-          <div style={{ textAlign: 'center', maxWidth: '680px', margin: '0 auto clamp(40px,5vw,56px)' }}>
-            <div style={{ fontSize: '14px', fontWeight: 600, color: '#86868b', letterSpacing: '.02em', marginBottom: '16px' }}>NOS DEUX MÉTIERS</div>
-            <h2 style={{ fontWeight: 800, fontSize: 'clamp(30px,4.6vw,52px)', lineHeight: 1.06, letterSpacing: '-.03em', margin: 0 }}>Un studio technique. Un parc matériel.</h2>
-          </div>
-
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '18px', alignItems: 'stretch' }}>
-            {pillarDefs.map((p) => {
-              const isActive = active === p.key;
-              const dimmed = active && !isActive;
-              const flexVal = isActive ? 1.7 : (dimmed ? 0.9 : 1.25);
-              const glowVal = isActive ? 1 : 0;
-              const shadowVal = isActive ? '0 30px 60px -28px rgba(0,0,0,.3)' : 'none';
-
-              return (
-                <div
-                  key={p.key}
-                  onClick={() => setActive(isActive ? null : p.key)}
-                  style={{
-                    flex: `${flexVal} 1 300px`,
-                    backgroundColor: '#f5f5f7',
-                    borderRadius: '24px',
-                    padding: 'clamp(30px,4vw,48px)',
-                    cursor: 'pointer',
-                    transition: 'all .5s cubic-bezier(.16,1,.3,1)',
-                    opacity: dimmed ? 0.6 : 1,
-                    transform: isActive ? 'scale(1.01)' : 'scale(1)',
-                    boxShadow: shadowVal,
-                    border: '1px solid rgba(0,0,0,.04)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                    minHeight: '400px'
-                  }}
-                >
-                  <div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                      <span style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '.06em', color: '#0071e3' }}>{p.tag}</span>
-                      <span style={{ fontSize: '15px', fontWeight: 800, color: '#86868b' }}>{p.no}</span>
-                    </div>
-                    <h3 style={{ fontWeight: 800, fontSize: 'clamp(24px,3vw,34px)', letterSpacing: '-.025em', margin: '0 0 16px', color: '#1d1d1f' }}>{p.title}</h3>
-                    <p style={{ fontSize: '15px', lineHeight: 1.55, color: '#6e6e73', margin: '0 0 32px', maxWidth: '38ch' }}>{p.desc}</p>
-                  </div>
-                  <div>
-                    <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      {p.feats.map((f, fi) => (
-                        <li key={fi} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', fontWeight: 600, color: '#1d1d1f' }}>
-                          <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#0071e3' }}></span>
-                          {f}
-                        </li>
-                      ))}
-                    </ul>
-                    {p.key === 'loc' && (
-                      <Link href="/location/catalogue" style={{ display: 'inline-flex', marginTop: '24px', padding: '10px 20px', borderRadius: '980px', backgroundColor: '#1d1d1f', color: '#fff', textDecoration: 'none', fontSize: '13px', fontWeight: 600 }}>
-                        Accéder au catalogue matériel ›
-                      </Link>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      {/* ===== PROCESS / MÉTHODE ===== */}
-      <section style={{ backgroundColor: '#f5f5f7', padding: 'clamp(70px,9vw,120px) clamp(20px,4vw,40px)' }}>
-        <div style={{ maxWidth: '1180px', margin: '0 auto' }}>
-          <div style={{ textAlign: 'center', maxWidth: '680px', margin: '0 auto clamp(40px,5vw,56px)' }}>
-            <div style={{ fontSize: '14px', fontWeight: 600, color: '#86868b', letterSpacing: '.02em', marginBottom: '16px' }}>MÉTHODE</div>
-            <h2 style={{ fontWeight: 800, fontSize: 'clamp(30px,4.6vw,52px)', lineHeight: 1.06, letterSpacing: '-.03em', margin: 0 }}>Un protocole pour chaque scène.</h2>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: '18px' }}>
-            {steps.map((s, i) => (
-              <div key={i} style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '32px 28px', border: '1px solid rgba(0,0,0,.04)', minHeight: '210px', display: 'flex', flexDirection: 'column' }}>
-                <div style={{ fontWeight: 800, fontSize: '15px', color: '#0071e3', letterSpacing: '.02em', marginBottom: 'auto' }}>{s.no}</div>
-                <h3 style={{ fontWeight: 700, fontSize: '20px', letterSpacing: '-.02em', margin: '26px 0 10px' }}>{s.title}</h3>
-                <p style={{ fontSize: '14px', lineHeight: 1.55, color: '#6e6e73', margin: 0 }}>{s.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ===== DYNAMIC PREVIEW OF GEAR (PARC) ===== */}
-      <section id="parc" style={{ backgroundColor: '#fff', padding: 'clamp(70px,9vw,120px) clamp(20px,4vw,40px)' }}>
-        <div style={{ maxWidth: '1180px', margin: '0 auto' }}>
-          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', justifyContent: 'space-between', gap: '28px', marginBottom: '40px' }}>
+      {/* ===== FEATURES (dark) ===== */}
+      <section style={{ maxWidth: '1280px', margin: '0 auto', padding: '0 clamp(14px,2vw,22px)', width: '100%' }}>
+        <div style={{ borderRadius: '28px', backgroundColor: '#1d1d1f', color: '#fff', padding: 'clamp(40px,5vw,72px) clamp(24px,4vw,60px)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 'clamp(20px,3vw,40px)', alignItems: 'start', marginBottom: 'clamp(38px,4vw,56px)' }}>
             <div>
-              <div style={{ fontSize: '14px', fontWeight: 600, color: '#86868b', letterSpacing: '.02em', marginBottom: '16px' }}>LE PARC</div>
-              <h2 style={{ fontWeight: 800, fontSize: 'clamp(30px,4.6vw,52px)', lineHeight: 1.06, letterSpacing: '-.03em', margin: 0, maxWidth: '14ch' }}>Un parc premium, marques de référence.</h2>
+              <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '.16em', textTransform: 'uppercase', color: '#5b9bff', marginBottom: '16px' }}>Fiabilité</div>
+              <h2 style={{ fontWeight: 800, fontSize: 'clamp(26px,3.6vw,44px)', lineHeight: 1.08, letterSpacing: '-.025em', margin: 0 }}>La sérénité, avant même le premier réglage.</h2>
             </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', backgroundColor: '#f5f5f7', padding: '5px', borderRadius: '980px' }}>
-              {filterDefs.map((ft) => {
-                const on = ft.key === filter;
-                return (
-                  <button
-                    key={ft.key}
-                    onClick={() => setFilter(ft.key)}
-                    style={{
-                      padding: '9px 18px',
-                      borderRadius: '980px',
-                      border: 'none',
-                      cursor: 'pointer',
-                      fontFamily: 'inherit',
-                      fontSize: '14px',
-                      fontWeight: 600,
-                      transition: 'all .25s',
-                      backgroundColor: on ? '#fff' : 'transparent',
-                      color: on ? '#1d1d1f' : '#6e6e73',
-                      boxShadow: on ? '0 2px 8px rgba(0,0,0,.1)' : 'none'
-                    }}
-                  >
-                    {ft.label}
-                  </button>
-                );
-              })}
-            </div>
+            <p style={{ fontSize: '15px', lineHeight: 1.65, color: 'rgba(255,255,255,.6)', maxWidth: '44ch', margin: 0, alignSelf: 'end' }}>Chaque prestation Sonelyx s'appuie sur du matériel contrôlé, des équipes certifiées et une assistance continue.</p>
           </div>
 
-          {loading ? (
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '300px' }}>
-              <Loader2 style={{ width: '36px', height: '36px', color: '#1d1d1f', animation: 'spin 1s linear infinite' }} />
-            </div>
-          ) : items.length > 0 ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: '18px' }}>
-              {items.slice(0, 6).map((e) => {
-                const isRequest = e.priceType === 'on_request';
-                return (
-                  <div key={e.id} style={{ display: 'flex', flexDirection: 'column', backgroundColor: '#fff', borderRadius: '22px', overflow: 'hidden', border: '1px solid rgba(0,0,0,.09)', transition: 'transform .4s cubic-bezier(.22,1,.36,1), box-shadow .4s, border-color .4s' }}>
-                    <div style={{ position: 'relative', aspectRatio: '4/3', backgroundColor: '#f5f5f7', overflow: 'hidden' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 'clamp(20px,2.5vw,36px)' }}>
+            {features.map((f, i) => (
+              <div key={i} style={{ borderTop: '1px solid rgba(255,255,255,.14)', paddingTop: '22px' }}>
+                <h3 style={{ fontWeight: 700, fontSize: '17px', letterSpacing: '-.01em', margin: '0 0 8px' }}>{f.title}</h3>
+                <p style={{ fontSize: '13px', lineHeight: 1.6, color: 'rgba(255,255,255,.55)', margin: 0 }}>{f.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ===== FLEET / PARC ===== */}
+      <section id="parc" style={{ maxWidth: '1280px', margin: '0 auto', padding: 'clamp(56px,7vw,110px) clamp(20px,3vw,40px)', width: '100%' }}>
+        <div style={{ textAlign: 'center', maxWidth: '620px', margin: '0 auto clamp(28px,3.5vw,42px)' }}>
+          <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '.16em', textTransform: 'uppercase', color: '#0071e3', marginBottom: '14px' }}>Le parc</div>
+          <h2 style={{ fontWeight: 800, fontSize: 'clamp(30px,4.4vw,52px)', lineHeight: 1.05, letterSpacing: '-.03em', margin: '0 0 14px' }}>Notre parc matériel</h2>
+          <p style={{ fontSize: '16px', lineHeight: 1.55, color: '#6b6b73', margin: 0 }}>Un catalogue professionnel complet : diffusion, éclairage, régie et structure, prêt à louer.</p>
+        </div>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center', marginBottom: 'clamp(26px,3vw,38px)' }}>
+          {filterDefs.map((ft) => {
+            const on = ft.key === filter;
+            return (
+              <button
+                key={ft.key}
+                onClick={() => setFilter(ft.key)}
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: '980px',
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  transition: 'all .25s',
+                  whiteSpace: 'nowrap',
+                  backgroundColor: on ? '#0b0e14' : '#fff',
+                  color: on ? '#fff' : '#5b5b63',
+                  border: on ? '1px solid #0b0e14' : '1px solid rgba(0,0,0,.14)',
+                }}
+              >
+                {ft.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {loading ? (
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '300px' }}>
+            <Loader2 style={{ width: '36px', height: '36px', color: '#1d1d1f', animation: 'spin 1s linear infinite' }} />
+          </div>
+        ) : items.length > 0 ? (
+          <div className="parc-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: '16px' }}>
+            {items.slice(0, 8).map((e) => {
+              const isRequest = e.priceType === 'on_request';
+              const available = e.quantity > 0;
+              return (
+                <div key={e.id} style={{ display: 'flex', flexDirection: 'column', backgroundColor: '#fff', borderRadius: '20px', overflow: 'hidden', border: '1px solid rgba(0,0,0,.09)', boxShadow: '0 1px 2px rgba(0,0,0,.04)', transition: 'transform .4s cubic-bezier(.22,1,.36,1), box-shadow .4s' }}>
+                  <Link href={`/location/catalogue/${e.slug}`} style={{ textDecoration: 'none', color: 'inherit', display: 'flex', flexDirection: 'column', flex: 1 }}>
+                    <div style={{ position: 'relative', aspectRatio: '16/11', backgroundColor: '#ffffff', overflow: 'hidden' }}>
                       {e.image ? (
-                        <img src={e.image} alt={`Location ${e.name} Orléans - Événementiel`} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                        <img src={e.image} alt={`Location ${e.name} - Sonelyx`} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                       ) : (
                         <>
                           <div style={{ position: 'absolute', inset: 0, backgroundImage: 'repeating-linear-gradient(135deg, rgba(0,0,0,.028) 0 1px, transparent 1px 16px)' }}></div>
                           <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse 80% 70% at 50% 120%, rgba(0,113,227,.07), transparent 62%)' }}></div>
                         </>
                       )}
-                      <span style={{ position: 'absolute', top: '14px', left: '14px', padding: '6px 12px', borderRadius: '980px', backgroundColor: 'rgba(255,255,255,.85)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', fontSize: '12px', fontWeight: 700, letterSpacing: '-.01em', color: '#1d1d1f' }}>{e.brand}</span>
-                      <span style={{ position: 'absolute', top: '14px', right: '14px', display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 11px', borderRadius: '980px', backgroundColor: 'rgba(255,255,255,.85)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', fontSize: '11px', fontWeight: 600, color: '#1d7a3e' }}><span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#1db954' }}></span>Disponible</span>
+                      <span style={{ position: 'absolute', top: '12px', left: '12px', padding: '6px 12px', borderRadius: '980px', backgroundColor: 'rgba(255,255,255,.9)', backdropFilter: 'blur(6px)', fontSize: '11px', fontWeight: 700, letterSpacing: '.02em', color: '#0b0e14' }}>{e.brand}</span>
                     </div>
-                    <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px', flex: 1 }}>
-                      <div>
-                        <div style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '.08em', color: '#86868b', marginBottom: '9px' }}>{categories.find(c => c.id === e.cat)?.label || e.catLabel}</div>
-                        <h3 style={{ fontWeight: 700, fontSize: '21px', letterSpacing: '-.02em', margin: '0 0 8px' }}>{e.name}</h3>
-                        <p style={{ fontSize: '14px', lineHeight: 1.5, color: '#6e6e73', margin: 0 }}>{e.desc}</p>
+                    <div style={{ padding: '18px 20px 20px', display: 'flex', flexDirection: 'column', flex: 1, backgroundColor: '#f5f5f7' }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
+                        <h3 style={{ fontWeight: 700, fontSize: '18px', letterSpacing: '-.02em', margin: 0 }}>{e.name}</h3>
+                        <span style={{ fontSize: '13px', fontWeight: 700, color: '#0071e3', whiteSpace: 'nowrap' }}>
+                          {isRequest ? 'Sur devis' : `${e.price} € ${e.priceTax || 'HT'}`}
+                        </span>
                       </div>
-                      {e.specs && e.specs.length > 0 && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '7px' }}>
-                          {e.specs.slice(0, 3).map((s, idx) => (
-                            <span key={idx} style={{ padding: '6px 12px', borderRadius: '8px', backgroundColor: '#f5f5f7', fontSize: '12px', fontWeight: 600, color: '#424245' }}>{s}</span>
-                          ))}
-                        </div>
-                      )}
-                      
-                      <div style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', paddingTop: '16px', borderTop: '1px solid rgba(0,0,0,.08)' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column' }}>
-                          <span style={{ fontSize: '11px', color: '#86868b' }}>Tarif / jour</span>
-                          <span style={{ fontSize: '15px', fontWeight: 700, color: '#1d1d1f' }}>
-                            {isRequest ? 'Sur devis' : `${e.price} € ${e.priceTax || 'HT'}`}
-                          </span>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <Link href={`/location/catalogue/${e.slug}`} style={{ fontSize: '14px', fontWeight: 600, color: '#0071e3', textDecoration: 'none' }}>
-                            Fiche tech.
-                          </Link>
-                          <button
-                            onClick={() => toggleSelect(e.id)}
-                            style={{
-                              padding: '8px 16px',
-                              borderRadius: '980px',
-                              border: 'none',
-                              cursor: 'pointer',
-                              fontSize: '13px',
-                              fontWeight: 600,
-                              fontFamily: 'inherit',
-                              transition: 'all .2s',
-                              backgroundColor: !!selected[e.id] ? '#e8f1fd' : '#1d1d1f',
-                              color: !!selected[e.id] ? '#0071e3' : '#ffffff'
-                            }}
-                          >
-                            {!!selected[e.id] ? '✓ Sélectionné' : 'Ajouter'}
-                          </button>
-                        </div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginTop: 'auto', paddingTop: '12px', borderTop: '1px solid rgba(0,0,0,.08)' }}>
+                        <span style={{ fontSize: '13px', color: '#8c8c94', fontWeight: 500 }}>{categories.find((c) => c.id === e.cat)?.label || e.catLabel}</span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, color: available ? '#1d7a3e' : '#8c8c94' }}>
+                          <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: available ? '#1db954' : '#c8c8ce' }}></span>
+                          {available ? 'Disponible' : 'Indisponible'}
+                        </span>
                       </div>
                     </div>
+                  </Link>
+                  <div style={{ padding: '0 20px 20px', backgroundColor: '#f5f5f7' }}>
+                    <button
+                      onClick={() => toggleSelect(e.id)}
+                      style={{
+                        width: '100%',
+                        padding: '10px 16px',
+                        borderRadius: '980px',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        fontFamily: 'inherit',
+                        transition: 'all .2s',
+                        backgroundColor: selected[e.id] ? '#e8f1fd' : '#0b0e14',
+                        color: selected[e.id] ? '#0071e3' : '#ffffff',
+                      }}
+                    >
+                      {selected[e.id] ? '✓ Sélectionné' : 'Ajouter au devis'}
+                    </button>
                   </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div style={{ textAlign: 'center', padding: '40px 20px', color: '#86868b' }}>
-              Aucun équipement disponible dans cette catégorie.
-            </div>
-          )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div style={{ textAlign: 'center', padding: '40px 20px', color: '#86868b' }}>Aucun équipement disponible dans cette catégorie.</div>
+        )}
+
+        <div style={{ textAlign: 'center', marginTop: 'clamp(30px,4vw,48px)' }}>
+          <Link href="/location/catalogue" style={{ display: 'inline-flex', alignItems: 'center', gap: '12px', padding: '8px 8px 8px 26px', borderRadius: '980px', backgroundColor: '#0b0e14', color: '#fff', textDecoration: 'none', fontWeight: 700, fontSize: '15px' }}>
+            Voir tout le matériel
+            <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '36px', height: '36px', borderRadius: '50%', backgroundColor: '#0071e3' }}>›</span>
+          </Link>
         </div>
+        <style>{`
+          @media (max-width: 680px) {
+            .parc-grid > *:nth-child(n+4) { display: none; }
+          }
+        `}</style>
       </section>
 
-      {/* ===== RÉFÉRENCES ===== */}
-      <section style={{ backgroundColor: '#f5f5f7', padding: 'clamp(70px,9vw,120px) clamp(20px,4vw,40px)' }}>
-        <div style={{ maxWidth: '1180px', margin: '0 auto' }}>
-          <div style={{ textAlign: 'center', maxWidth: '680px', margin: '0 auto clamp(40px,5vw,52px)' }}>
-            <div style={{ fontSize: '14px', fontWeight: 600, color: '#86868b', letterSpacing: '.02em', marginBottom: '16px' }}>RÉFÉRENCES</div>
-            <h2 style={{ fontWeight: 800, fontSize: 'clamp(30px,4.6vw,52px)', lineHeight: 1.06, letterSpacing: '-.03em', margin: 0 }}>Ils nous confient leurs événements.</h2>
-            <p style={{ margin: '18px auto 0', maxWidth: '520px', fontSize: '18px', lineHeight: 1.5, color: '#6e6e73' }}>Festivals, événements corporate, soirées de marque et productions live.</p>
+      {/* ===== PROCESS ===== */}
+      <section id="process" style={{ backgroundColor: '#f5f5f7', padding: 'clamp(56px,7vw,110px) clamp(20px,3vw,40px)' }}>
+        <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: 'clamp(28px,4vw,56px)', alignItems: 'center', marginBottom: 'clamp(40px,5vw,64px)' }}>
+            <div>
+              <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '.16em', textTransform: 'uppercase', color: '#0071e3', marginBottom: '16px' }}>Méthode</div>
+              <h2 style={{ fontWeight: 800, fontSize: 'clamp(28px,4vw,48px)', lineHeight: 1.06, letterSpacing: '-.03em', margin: '0 0 22px' }}>Réserver votre matériel, étape par étape.</h2>
+              <Link href="/location/catalogue" style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', padding: '8px 8px 8px 24px', borderRadius: '980px', backgroundColor: '#0b0e14', color: '#fff', textDecoration: 'none', fontWeight: 700, fontSize: '14px' }}>
+                Composer ma sélection
+                <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '34px', height: '34px', borderRadius: '50%', backgroundColor: '#0071e3' }}>›</span>
+              </Link>
+            </div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: '14px' }}>
-            {[0, 1, 2, 3, 4, 5].map((l) => (
-              <div key={l} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '96px', backgroundColor: '#fff', borderRadius: '16px', border: '1px solid rgba(0,0,0,.04)', fontSize: '12px', fontWeight: 500, color: '#b0b0b5', letterSpacing: '.04em' }}>
-                [ logo client ]
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 'clamp(20px,2.5vw,32px)' }}>
+            {processSteps.map((p) => (
+              <div key={p.no} style={{ borderTop: '2px solid #0b0e14', paddingTop: '20px' }}>
+                <div style={{ width: '38px', height: '38px', borderRadius: '50%', backgroundColor: '#0b0e14', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '13px', marginBottom: '18px' }}>{p.no}</div>
+                <h3 style={{ fontWeight: 700, fontSize: '18px', letterSpacing: '-.01em', margin: '0 0 8px' }}>{p.title}</h3>
+                <p style={{ fontSize: '14px', lineHeight: 1.6, color: '#6b6b73', margin: 0 }}>{p.desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ===== FINAL CTA ===== */}
-      <section id="contact" style={{ backgroundColor: '#fff', textAlign: 'center', padding: 'clamp(90px,12vw,170px) clamp(20px,4vw,40px)' }}>
-        <div style={{ maxWidth: '820px', margin: '0 auto' }}>
-          <h2 style={{ fontWeight: 800, fontSize: 'clamp(38px,6.6vw,84px)', lineHeight: 1.02, letterSpacing: '-.035em', margin: '0 0 24px' }}>Allumons votre prochaine scène.</h2>
-          <p style={{ fontSize: 'clamp(17px,1.8vw,21px)', color: '#6e6e73', maxWidth: '500px', margin: '0 auto 40px', lineHeight: 1.5 }}>Parlez-nous de votre projet. Devis sur-mesure sous 24h, étude technique offerte.</p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '14px 28px', justifyContent: 'center', alignItems: 'center' }}>
-            <Link href="/location/catalogue" style={{ display: 'inline-flex', alignItems: 'center', padding: '16px 34px', borderRadius: '980px', backgroundColor: '#1d1d1f', color: '#fff', textDecoration: 'none', fontWeight: 600, fontSize: '17px', transition: 'background .25s, transform .15s' }}>
-              Démarrer mon projet
+      {/* ===== SAFETY / QUALITY (dark) ===== */}
+      <section style={{ maxWidth: '1280px', margin: '0 auto', padding: 'clamp(20px,3vw,40px) clamp(14px,2vw,22px)', width: '100%' }}>
+        <div style={{ borderRadius: '28px', backgroundColor: '#1d1d1f', color: '#fff', padding: 'clamp(36px,5vw,68px) clamp(24px,4vw,60px)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: 'clamp(30px,4vw,56px)', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '.16em', textTransform: 'uppercase', color: '#5b9bff', marginBottom: '16px' }}>Notre engagement</div>
+              <h2 style={{ fontWeight: 800, fontSize: 'clamp(28px,3.8vw,46px)', lineHeight: 1.07, letterSpacing: '-.025em', margin: '0 0 26px' }}>Votre événement est notre priorité.</h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '32px' }}>
+                {commitments.map((c, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
+                    <span style={{ flexShrink: 0, width: '24px', height: '24px', borderRadius: '50%', backgroundColor: 'rgba(0,113,227,.16)', border: '1px solid rgba(0,113,227,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#8fb0ff', fontSize: '12px', fontWeight: 700 }}>✓</span>
+                    <span style={{ fontSize: '15px', lineHeight: 1.5, color: 'rgba(255,255,255,.78)' }}>{c}</span>
+                  </div>
+                ))}
+              </div>
+              <Link href="/location/catalogue" style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', padding: '8px 8px 8px 24px', borderRadius: '980px', backgroundColor: 'rgba(255,255,255,.12)', border: '1px solid rgba(255,255,255,.2)', color: '#fff', textDecoration: 'none', fontWeight: 600, fontSize: '14px' }}>
+                Explorer le parc
+                <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '50%', backgroundColor: '#0071e3' }}>›</span>
+              </Link>
+            </div>
+            <div>
+              <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '.16em', textTransform: 'uppercase', color: '#5b9bff', marginBottom: '16px' }}>Contrôle qualité</div>
+              <h2 style={{ fontWeight: 800, fontSize: 'clamp(26px,3.4vw,42px)', lineHeight: 1.08, letterSpacing: '-.025em', margin: '0 0 18px' }}>Un matériel calibré, à chaque sortie.</h2>
+              <p style={{ fontSize: '15px', lineHeight: 1.65, color: 'rgba(255,255,255,.6)', margin: '0 0 28px', maxWidth: '46ch' }}>Chaque équipement est testé, étiqueté et garanti opérationnel avant de partir. Un parc entretenu qui réduit les imprévus et protège votre événement.</p>
+              <Link href="/location/catalogue" style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', padding: '8px 8px 8px 24px', borderRadius: '980px', backgroundColor: '#fff', color: '#0b0e14', textDecoration: 'none', fontWeight: 700, fontSize: '14px' }}>
+                Voir le parc matériel
+                <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '50%', backgroundColor: '#0071e3', color: '#fff' }}>›</span>
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ===== CONTACT / DEVIS ===== */}
+      <section id="contact" style={{ maxWidth: '1280px', margin: '0 auto', padding: 'clamp(56px,7vw,110px) clamp(20px,3vw,40px)', width: '100%' }}>
+        <div style={{ backgroundColor: '#f5f5f7', borderRadius: '28px', padding: 'clamp(28px,4vw,56px)' }}>
+          <div style={{ fontSize: '12px', fontWeight: 700, letterSpacing: '.16em', textTransform: 'uppercase', color: '#0071e3', marginBottom: '16px' }}>Contact</div>
+          <h2 style={{ fontWeight: 800, fontSize: 'clamp(28px,4vw,48px)', lineHeight: 1.05, letterSpacing: '-.03em', margin: '0 0 22px', maxWidth: '18ch' }}>Recevez votre devis sur-mesure.</h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '30px', maxWidth: '520px' }}>
+            {perks.map((p, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                <span style={{ flexShrink: 0, width: '22px', height: '22px', borderRadius: '50%', backgroundColor: 'rgba(0,113,227,.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0071e3', fontSize: '12px', fontWeight: 700 }}>✓</span>
+                <span style={{ fontSize: '15px', lineHeight: 1.5, color: '#3a3a42' }}>{p}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+            <Link href="/location/catalogue" style={{ display: 'inline-flex', alignItems: 'center', padding: '14px 28px', borderRadius: '980px', backgroundColor: '#0b0e14', color: '#fff', textDecoration: 'none', fontWeight: 700, fontSize: '15px' }}>
+              Demander un devis
             </Link>
-            <Link href="/location/catalogue" style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', color: '#0071e3', textDecoration: 'none', fontWeight: 600, fontSize: '17px' }}>
-              Voir le parc ›
-            </Link>
+            <a href="mailto:contact@sonelyx.fr" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#0b0e14', textDecoration: 'none', fontWeight: 600, fontSize: '15px', borderBottom: '1px solid rgba(0,0,0,.25)', paddingBottom: '3px' }}>
+              Nous écrire directement ›
+            </a>
           </div>
         </div>
       </section>
 
       {/* ===== FLOATING DEVIS BAR ===== */}
       {count > 0 && (
-        <div style={{ position: 'fixed', left: '50%', bottom: '24px', transform: 'translateX(-50%)', zIndex: 70, display: 'flex', alignItems: 'center', gap: '16px', padding: '11px 11px 11px 22px', borderRadius: '980px', backgroundColor: 'rgba(29,29,31,.92)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', boxShadow: '0 20px 54px -18px rgba(0,0,0,.6)', color: '#fff', maxWidth: 'calc(100vw - 32px)' }}>
-          <span style={{ fontSize: '14px', fontWeight: 600, whiteSpace: 'nowrap' }}>{selectionLabel}</span>
-          <Link href="/location/panier" style={{ display: 'inline-flex', alignItems: 'center', padding: '10px 22px', borderRadius: '980px', backgroundColor: '#fff', color: '#1d1d1f', textDecoration: 'none', fontWeight: 600, fontSize: '14px', whiteSpace: 'nowrap' }}>
-            Demander un devis
-          </Link>
-          <button onClick={clearSelection} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,.6)', fontSize: '13px', fontWeight: 500, padding: '6px', fontFamily: 'inherit' }}>
-            Effacer
-          </button>
-        </div>
+        <>
+          <div className="devis-float-bar" style={{ position: 'fixed', left: '50%', bottom: '24px', transform: 'translateX(-50%)', zIndex: 70, display: 'flex', alignItems: 'center', gap: '16px', padding: '11px 11px 11px 22px', borderRadius: '980px', backgroundColor: 'rgba(29,29,31,.92)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', boxShadow: '0 20px 54px -18px rgba(0,0,0,.6)', color: '#fff', maxWidth: 'calc(100vw - 32px)' }}>
+            <span style={{ fontSize: '14px', fontWeight: 600, whiteSpace: 'nowrap' }}>{selectionLabel}</span>
+            <Link href="/location/panier" className="devis-float-cta" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '10px 22px', borderRadius: '980px', backgroundColor: '#fff', color: '#1d1d1f', textDecoration: 'none', fontWeight: 600, fontSize: '14px', whiteSpace: 'nowrap' }}>
+              Demander un devis
+            </Link>
+            <button onClick={clearSelection} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,.6)', fontSize: '13px', fontWeight: 500, padding: '6px', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+              Effacer
+            </button>
+          </div>
+          <style>{`
+            @media (max-width: 480px) {
+              .devis-float-bar { flex-direction: column; align-items: stretch; width: calc(100vw - 32px); border-radius: 20px; padding: 14px 16px 16px; gap: 10px; text-align: center; }
+              .devis-float-bar .devis-float-cta { width: 100%; }
+            }
+          `}</style>
+        </>
       )}
 
       <Footer />

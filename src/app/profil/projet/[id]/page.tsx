@@ -588,9 +588,9 @@ export default function ProjectPage({ params }: PageProps) {
               </div>
               {dt === 'devis' ? <DevisSection docs={docs} /> : (
                 <>
-                  {dt === 'facture' && docs.some(q => q.status === 'validated') && (
+                  {dt === 'facture' && docs.some(q => q.status === 'validated' && q.invoicePaymentStatus !== 'SUCCEEDED') && (
                     <div style={{ marginBottom: 16 }}>
-                      {docs.filter(q => q.status === 'validated').map(q => (
+                      {docs.filter(q => q.status === 'validated' && q.invoicePaymentStatus !== 'SUCCEEDED').map(q => (
                         <div key={`pay-${q.id}`} style={{ marginBottom: 12 }}>
                           <PaymentRouter
                             totalAmount={q.totalTTC}

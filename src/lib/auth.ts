@@ -2,7 +2,7 @@ import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from '@better-auth/drizzle-adapter';
 import { db } from '@/db';
 import * as schema from '@/db/schema';
-import { sendWelcomeEmail } from './email';
+import { sendWelcomeEmail, sendPasswordResetEmail } from './email';
 
 // Only set baseURL if explicitly configured — avoids http://localhost:3000 fallback
 // in production which would cause wrong cookie names/Secure attributes.
@@ -25,6 +25,13 @@ export const auth = betterAuth({
   ],
   emailAndPassword: {
     enabled: true,
+    sendResetPassword: async ({ user, url }) => {
+      try {
+        await sendPasswordResetEmail(user.email, user.name, url);
+      } catch (e) {
+        console.error('Error sending password reset email:', e);
+      }
+    },
   },
   user: {
     additionalFields: {

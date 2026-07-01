@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
 import Header from '@/components/header';
 import Footer from '@/components/footer';
 
@@ -81,13 +80,10 @@ export default function ProductDetailClient({ item, similarItems }: Props) {
           {/* Left Column: Visual */}
           <div style={{ position: 'relative', borderRadius: '24px', overflow: 'hidden', aspectRatio: '4/3', backgroundColor: '#f5f5f7', border: '1px solid rgba(0,0,0,.08)' }}>
             {item.image ? (
-              <Image
+              <img
                 src={item.image}
                 alt={altText}
-                fill
-                style={{ objectFit: 'contain' }}
-                sizes="(max-width: 768px) 100vw, 50vw"
-                priority
+                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' }}
               />
             ) : (
               <>
@@ -156,7 +152,7 @@ export default function ProductDetailClient({ item, similarItems }: Props) {
                     <Link href={`/location/catalogue/${p.slug}`} style={{ textDecoration: 'none', color: 'inherit' }}>
                       <div style={{ position: 'relative', aspectRatio: '4/3', backgroundColor: '#f5f5f7', overflow: 'hidden' }}>
                         {p.image ? (
-                          <Image src={p.image} alt={pAlt} fill style={{ objectFit: 'contain' }} sizes="280px" />
+                          <img src={p.image} alt={pAlt} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' }} />
                         ) : (
                           <div style={{ position: 'absolute', inset: 0, backgroundImage: 'repeating-linear-gradient(135deg, rgba(0,0,0,.028) 0 1px, transparent 1px 16px)' }}></div>
                         )}

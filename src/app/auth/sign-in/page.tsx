@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { authClient } from '@/lib/auth-client';
 import { Loader2 } from 'lucide-react';
@@ -11,7 +10,6 @@ export default function SignIn() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const router = useRouter();
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,8 +30,10 @@ export default function SignIn() {
       setError(authError.message || 'Une erreur est survenue lors de la connexion.');
       setLoading(false);
     } else {
-      router.push('/dashboard');
-      router.refresh();
+      // Full reload (not router.push) so every client picks up the fresh session
+      // cookie immediately — a soft navigation can briefly show stale cached
+      // "no session" state and bounce the user back to this page.
+      window.location.href = '/dashboard';
     }
   };
 
@@ -97,9 +97,14 @@ export default function SignIn() {
 
           {/* Password input */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <label htmlFor="password" style={{ fontSize: '14px', fontWeight: 600, color: '#1d1d1f' }}>
-              Mot de passe
-            </label>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <label htmlFor="password" style={{ fontSize: '14px', fontWeight: 600, color: '#1d1d1f' }}>
+                Mot de passe
+              </label>
+              <Link href="/auth/forgot-password" style={{ fontSize: '13px', color: '#0071e3', textDecoration: 'none', fontWeight: 600 }}>
+                Mot de passe oublié ?
+              </Link>
+            </div>
             <input
               id="password"
               type="password"
