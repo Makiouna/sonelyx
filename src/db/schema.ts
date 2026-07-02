@@ -9,6 +9,7 @@ export const user = pgTable('user', {
   createdAt: timestamp('createdAt').notNull(),
   updatedAt: timestamp('updatedAt').notNull(),
   role: text('role'),
+  stripeCustomerId: text('stripe_customer_id'), // Stripe Customer object id, created lazily on first Stripe invoice
 });
 
 export const category = pgTable('category', {
@@ -114,6 +115,7 @@ export const quote = pgTable('quote', {
   depositReminderSentAt: timestamp('deposit_reminder_sent_at'), // date du dernier rappel J-3 envoyé
   invoiceStripePaymentIntentId: text('invoice_stripe_payment_intent_id'),
   invoicePaymentStatus: text('invoice_payment_status').$type<'PENDING' | 'SUCCEEDED' | 'FAILED' | 'CASH'>(),
+  stripeInvoiceId: text('stripe_invoice_id'), // Stripe hosted Invoice id — set when sent via the "Envoyer via Stripe" admin action
   cancellationReason: text('cancellation_reason'),
   cancelledAt: timestamp('cancelled_at'),
   cartReminderSentAt: timestamp('cart_reminder_sent_at'),

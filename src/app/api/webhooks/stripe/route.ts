@@ -6,6 +6,7 @@ import { eq } from 'drizzle-orm';
 import type Stripe from 'stripe';
 import { resend } from '@/lib/resend';
 import { buildDepositConfirmedEmail } from '@/lib/email-templates/deposit-confirmed';
+import { sendInvoicePaymentConfirmationEmail } from '@/lib/email';
 
 export async function POST(request: Request) {
   const body = await request.text();
@@ -21,6 +22,47 @@ export async function POST(request: Request) {
   } catch (err: any) {
     console.error('[SECURITY] Stripe webhook signature verification failed — possible spoofing attempt:', err.message);
     return NextResponse.json({ error: 'Webhook signature invalid.' }, { status: 400 });
+  }
+
+  // ── Stripe-hosted invoice events (sent via the "Envoyer via Stripe" admin action) ──
+  if (event.type === 'invoice.paid' || event.type === 'invoice.payment_failed') {
+    const invoice = event.data.object as Stripe.Invoice;
+    const quoteId = invoice.metadata?.quoteId;
+    if (!quoteId) return NextResponse.json({ received: true });
+
+    const rows = await db.select().from(quoteTable).where(eq(quoteTable.id, quoteId)).limit(1);
+    const quote = rows[0];
+    if (!quote || quote.stripeInvoiceId !== invoice.id) return NextResponse.json({ received: true });
+
+    if (event.type === 'invoice.paid') {
+      const wasAlreadySucceeded = quote.invoicePaymentStatus === 'SUCCEEDED';
+      await db
+        .update(quoteTable)
+        .set({ invoicePaymentStatus: 'SUCCEEDED', updatedAt: new Date() })
+        .where(eq(quoteTable.id, quoteId));
+
+      if (!wasAlreadySucceeded) {
+        const clientRows = await db.select().from(userTable).where(eq(userTable.id, quote.userId)).limit(1);
+        const client = clientRows[0];
+        if (client) {
+          sendInvoicePaymentConfirmationEmail(
+            client.email,
+            client.name,
+            quote.projectName ?? 'Votre Projet',
+            quote.startDate,
+            quote.totalTTC,
+            'card',
+          ).catch(err => console.error('Payment confirmation email failed:', err));
+        }
+      }
+    } else {
+      await db
+        .update(quoteTable)
+        .set({ invoicePaymentStatus: 'FAILED', updatedAt: new Date() })
+        .where(eq(quoteTable.id, quoteId));
+    }
+
+    return NextResponse.json({ received: true });
   }
 
   const paymentIntent = event.data.object as Stripe.PaymentIntent;

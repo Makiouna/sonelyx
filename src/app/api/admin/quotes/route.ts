@@ -37,6 +37,7 @@ export async function GET() {
         stripePaymentIntentId: quoteTable.stripePaymentIntentId,
         invoiceStripePaymentIntentId: quoteTable.invoiceStripePaymentIntentId,
         invoicePaymentStatus: quoteTable.invoicePaymentStatus,
+        stripeInvoiceId: quoteTable.stripeInvoiceId,
         cancellationReason: quoteTable.cancellationReason,
         cancelledAt: quoteTable.cancelledAt,
         createdAt: quoteTable.createdAt,

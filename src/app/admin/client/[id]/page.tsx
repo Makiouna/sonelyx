@@ -97,6 +97,7 @@ interface Quote {
   stripePaymentIntentId: string | null;
   invoiceStripePaymentIntentId: string | null;
   invoicePaymentStatus: 'PENDING' | 'SUCCEEDED' | 'FAILED' | 'CASH' | null;
+  stripeInvoiceId: string | null;
   cancellationReason: string | null;
   cancelledAt: string | null;
   createdAt: string;
@@ -623,6 +624,26 @@ export default function ClientFolderPage({ params }: PageProps) {
         fetchClientData();
       } else {
         alert(data.error || 'Erreur lors de la mise à jour.');
+      }
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleSendStripeInvoice = async (quoteId: string) => {
+    if (!window.confirm(`Envoyer la facture #${quoteId} au client via Stripe ?`)) return;
+    setActionLoading(quoteId + '-stripe-invoice');
+    try {
+      const res = await fetch('/api/admin/invoices/send-stripe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quoteId }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchClientData();
+      } else {
+        alert(data.error || 'Erreur lors de l\'envoi de la facture Stripe.');
       }
     } finally {
       setActionLoading(null);
@@ -1949,6 +1970,32 @@ export default function ClientFolderPage({ params }: PageProps) {
                                           <ExternalLink style={{ width: '11px', height: '11px' }} /> Stripe
                                         </a>
                                       </div>
+                                    ) : q.stripeInvoiceId ? (
+                                      <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                        {q.invoicePaymentStatus === 'SUCCEEDED'
+                                          ? <CheckCircle2 style={{ width: '16px', height: '16px', color: '#15803d', flexShrink: 0 }} />
+                                          : q.invoicePaymentStatus === 'FAILED'
+                                          ? <XCircle style={{ width: '16px', height: '16px', color: '#ef4444', flexShrink: 0 }} />
+                                          : <Clock style={{ width: '16px', height: '16px', color: '#d97706', flexShrink: 0 }} />
+                                        }
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                          <div style={{ fontSize: '12px', fontWeight: 700, color: q.invoicePaymentStatus === 'SUCCEEDED' ? '#15803d' : q.invoicePaymentStatus === 'FAILED' ? '#ef4444' : '#d97706' }}>
+                                            Facture Stripe —{' '}
+                                            {q.invoicePaymentStatus === 'SUCCEEDED' ? 'Payée ✓' : q.invoicePaymentStatus === 'FAILED' ? 'Paiement échoué' : 'Envoyée, en attente'}
+                                          </div>
+                                          <div style={{ fontSize: '10px', color: '#86868b', marginTop: '2px', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
+                                            {q.stripeInvoiceId}
+                                          </div>
+                                        </div>
+                                        <a
+                                          href={`https://dashboard.stripe.com/invoices/${q.stripeInvoiceId}`}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: '#0071e3', textDecoration: 'none', fontWeight: 700, whiteSpace: 'nowrap' as const, flexShrink: 0 }}
+                                        >
+                                          <ExternalLink style={{ width: '11px', height: '11px' }} /> Stripe
+                                        </a>
+                                      </div>
                                     ) : (
                                       <div style={{ padding: '10px 14px', fontSize: '12px', color: '#86868b', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: '7px' }}>
                                         <Clock style={{ width: '13px', height: '13px', flexShrink: 0 }} />
@@ -1958,7 +2005,7 @@ export default function ClientFolderPage({ params }: PageProps) {
 
                                     {/* Bouton paiement en espèces — visible tant que non réglé */}
                                     {q.invoicePaymentStatus !== 'SUCCEEDED' && q.invoicePaymentStatus !== 'CASH' && (
-                                      <div style={{ padding: '8px 14px', borderTop: '1px solid rgba(0,0,0,.05)', backgroundColor: '#fafafa' }}>
+                                      <div style={{ padding: '8px 14px', borderTop: '1px solid rgba(0,0,0,.05)', backgroundColor: '#fafafa', display: 'flex', flexWrap: 'wrap' as const, gap: '8px' }}>
                                         <button
                                           onClick={() => handleMarkCash(q.id)}
                                           disabled={actionLoading === q.id + '-cash'}
@@ -1970,6 +2017,19 @@ export default function ClientFolderPage({ params }: PageProps) {
                                           }
                                           Marquer payé en espèces
                                         </button>
+                                        {!q.stripeInvoiceId && (
+                                          <button
+                                            onClick={() => handleSendStripeInvoice(q.id)}
+                                            disabled={actionLoading === q.id + '-stripe-invoice'}
+                                            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '980px', backgroundColor: 'transparent', color: '#0071e3', border: '1px solid rgba(0,113,227,.3)', cursor: 'pointer', fontWeight: 700, fontSize: '11px' }}
+                                          >
+                                            {actionLoading === q.id + '-stripe-invoice'
+                                              ? <Loader2 style={{ width: '11px', height: '11px', animation: 'spin 1s linear infinite' }} />
+                                              : <Send style={{ width: '11px', height: '11px' }} />
+                                            }
+                                            Envoyer via Stripe
+                                          </button>
+                                        )}
                                       </div>
                                     )}
 
