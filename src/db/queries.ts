@@ -205,3 +205,34 @@ export async function getEquipmentBySlug(slug: string) {
 
   return result[0] ?? null;
 }
+
+/**
+ * Fetches the name and technical characteristics of an equipment item,
+ * used to feed the "Expert Produit" AI assistant's system prompt.
+ */
+export async function getProductSpecs(productId: string) {
+  const result = await db
+    .select({
+      id: equipment.id,
+      name: equipment.name,
+      brand: equipment.brand,
+      catLabel: equipment.catLabel,
+      desc: equipment.desc,
+      specs: equipment.specs,
+    })
+    .from(equipment)
+    .where(eq(equipment.id, productId))
+    .limit(1);
+
+  const item = result[0];
+  if (!item) return null;
+
+  return {
+    id: item.id,
+    name: item.name,
+    brand: item.brand,
+    catLabel: item.catLabel,
+    desc: item.desc,
+    specs: JSON.parse(item.specs) as string[],
+  };
+}

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Header from '@/components/header';
 import Footer from '@/components/footer';
+import ProductExpertChat from '@/components/product-expert-chat';
 
 interface EquipmentItem {
   id: string;
@@ -116,6 +117,8 @@ export default function ProductDetailClient({ item, similarItems }: Props) {
                 </div>
               </div>
             )}
+
+            <ProductExpertChat productId={item.id} productName={item.name} />
 
             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '16px', paddingTop: '16px', borderTop: '1px solid rgba(0,0,0,.08)' }}>
               <button
