@@ -1,7 +1,14 @@
-'use client';
-
+import type { Metadata } from 'next';
 import Header from '@/components/header';
 import Footer from '@/components/footer';
+
+const SITE_URL = 'https://sonelyx.fr';
+
+export const metadata: Metadata = {
+  title: 'Conditions Générales de Location | Sonelyx',
+  description: 'Conditions Générales de Location en Ligne (CGL) de Sonelyx : modalités de réservation, livraison, garantie et responsabilité pour la location de matériel événementiel à Orléans.',
+  alternates: { canonical: `${SITE_URL}/cgv` },
+};
 
 export default function CGV() {
   return (

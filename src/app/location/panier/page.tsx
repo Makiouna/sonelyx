@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { authClient } from '@/lib/auth-client';
 import Header from '@/components/header';
 import Footer from '@/components/footer';
@@ -365,7 +366,7 @@ export default function CartPage() {
                           <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flex: '1 1 240px' }}>
                             <div style={{ position: 'relative', width: '64px', height: '64px', borderRadius: '12px', overflow: 'hidden', backgroundColor: '#f5f5f7', border: '1px solid rgba(0,0,0,.06)', flexShrink: 0 }}>
                               {item.image ? (
-                                <img src={item.image} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                                <Image src={item.image} alt={`Location ${item.name} Orléans`} fill sizes="64px" style={{ objectFit: 'contain' }} unoptimized />
                               ) : (
                                 <div style={{ position: 'absolute', inset: 0, backgroundImage: 'repeating-linear-gradient(135deg, rgba(0,0,0,.025) 0 1px, transparent 1px 8px)' }}></div>
                               )}

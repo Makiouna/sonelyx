@@ -1,7 +1,14 @@
-'use client';
-
+import type { Metadata } from 'next';
 import Header from '@/components/header';
 import Footer from '@/components/footer';
+
+const SITE_URL = 'https://sonelyx.fr';
+
+export const metadata: Metadata = {
+  title: 'Politique de Confidentialité | Sonelyx',
+  description: 'Politique de confidentialité de Sonelyx : collecte, usage et protection de vos données personnelles conformément au RGPD, dans le cadre de la location de matériel événementiel à Orléans.',
+  alternates: { canonical: `${SITE_URL}/confidentialite` },
+};
 
 export default function Confidentialite() {
   return (

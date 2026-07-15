@@ -1,7 +1,14 @@
-'use client';
-
+import type { Metadata } from 'next';
 import Header from '@/components/header';
 import Footer from '@/components/footer';
+
+const SITE_URL = 'https://sonelyx.fr';
+
+export const metadata: Metadata = {
+  title: 'Mentions Légales | Sonelyx',
+  description: 'Mentions légales du site Sonelyx : identité de l\'éditeur, hébergement, propriété intellectuelle et informations légales sur la location de matériel événementiel à Orléans.',
+  alternates: { canonical: `${SITE_URL}/mentions-legales` },
+};
 
 export default function MentionsLegales() {
   return (

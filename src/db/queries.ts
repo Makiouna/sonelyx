@@ -1,6 +1,6 @@
 import { eq, sql, inArray } from 'drizzle-orm';
 import { db } from './index';
-import { equipment, productItems } from './schema';
+import { equipment, productItems, category, setting, packCompositions } from './schema';
 
 /**
  * Fetches all equipment items, joining with the product_items table
@@ -200,10 +200,82 @@ export async function getEquipmentBySlug(slug: string) {
     })
     .from(equipment)
     .leftJoin(activeCountSubquery, eq(equipment.id, activeCountSubquery.productId))
-    .where(eq(equipment.slug, slug))
+    .where(sql`COALESCE(${equipment.slug}, 'location-' || ${equipment.id} || '-orleans') = ${slug}`)
     .limit(1);
 
   return result[0] ?? null;
+}
+
+/**
+ * Fetches all equipment categories, used for catalogue filters.
+ */
+export async function getCategories() {
+  return db.select().from(category);
+}
+
+/**
+ * Fetches the public catalogue: equipment with parsed specs, TVA-adjusted
+ * pricing and pack-corrected stock, stripped of internal fields (purchasePrice).
+ * Used by public Server Components (accueil, catalogue) that render on the server.
+ */
+export async function getPublicEquipmentList() {
+  const items = await getEquipmentWithQuantity();
+
+  const tvaSetting = await db.select().from(setting).where(eq(setting.id, 'tva_rate')).limit(1);
+  const tvaRate = tvaSetting.length > 0 ? Number(tvaSetting[0].value) : 20;
+
+  const componentQtyMap: Record<string, number> = {};
+  for (const item of items) {
+    if (!item.isPack) componentQtyMap[item.id] = item.quantity;
+  }
+
+  const allCompositions = await db.select().from(packCompositions);
+  const packCompMap: Record<string, Array<{ componentId: string; quantityNeeded: number }>> = {};
+  for (const row of allCompositions) {
+    if (!packCompMap[row.packProductId]) packCompMap[row.packProductId] = [];
+    packCompMap[row.packProductId].push({ componentId: row.componentProductId, quantityNeeded: row.quantityNeeded });
+  }
+
+  return items.map((item) => {
+    const specs = JSON.parse(item.specs) as string[];
+
+    let effectiveQuantity = item.quantity;
+    if (item.isPack) {
+      const comps = packCompMap[item.id];
+      effectiveQuantity = !comps || comps.length === 0
+        ? 0
+        : Math.min(...comps.map((c) => Math.floor((componentQtyMap[c.componentId] ?? 0) / c.quantityNeeded)));
+    }
+
+    let priceHT = item.price;
+    let priceTTC = item.price;
+    if (item.priceType === 'numeric') {
+      if (item.priceTax === 'HT') {
+        priceTTC = Math.round(item.price * (1 + tvaRate / 100) * 100) / 100;
+      } else {
+        priceHT = Math.round((item.price / (1 + tvaRate / 100)) * 100) / 100;
+      }
+    }
+
+    return {
+      id: item.id,
+      slug: item.slug ?? `location-${item.id}-orleans`,
+      cat: item.cat,
+      catLabel: item.catLabel,
+      brand: item.brand,
+      name: item.name,
+      desc: item.desc,
+      specs,
+      price: item.price,
+      priceType: item.priceType as 'numeric' | 'on_request',
+      priceTax: item.priceTax as 'HT' | 'TTC',
+      priceHT,
+      priceTTC,
+      image: item.image,
+      quantity: effectiveQuantity,
+      isPack: item.isPack,
+    };
+  });
 }
 
 /**

@@ -17,8 +17,8 @@ export default function Footer() {
           <div>
             <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff', marginBottom: '16px' }}>Catégories</div>
             <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '14px' }}>
-              <li><Link href="/location/catalogue" style={{ color: 'inherit', textDecoration: 'none' }}>Diffusion / Line-array</Link></li>
-              <li><Link href="/location/catalogue" style={{ color: 'inherit', textDecoration: 'none' }}>Éclairage scénique</Link></li>
+              <li><Link href="/location-sono-orleans" style={{ color: 'inherit', textDecoration: 'none' }}>Sonorisation & DJ</Link></li>
+              <li><Link href="/location-eclairage-loiret" style={{ color: 'inherit', textDecoration: 'none' }}>Éclairage scénique</Link></li>
               <li><Link href="/location/catalogue" style={{ color: 'inherit', textDecoration: 'none' }}>Régie &amp; contrôle</Link></li>
               <li><Link href="/location/catalogue" style={{ color: 'inherit', textDecoration: 'none' }}>Structure &amp; énergie</Link></li>
             </ul>
@@ -27,7 +27,7 @@ export default function Footer() {
             <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff', marginBottom: '16px' }}>Sonelyx</div>
             <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '14px' }}>
               <li><Link href="/" style={{ color: 'inherit', textDecoration: 'none' }}>Accueil</Link></li>
-              <li><Link href="/#metiers" style={{ color: 'inherit', textDecoration: 'none' }}>Prestation technique</Link></li>
+              <li><Link href="/realisations" style={{ color: 'inherit', textDecoration: 'none' }}>Réalisations</Link></li>
               <li><Link href="/#fiabilite" style={{ color: 'inherit', textDecoration: 'none' }}>Fiabilité</Link></li>
             </ul>
           </div>

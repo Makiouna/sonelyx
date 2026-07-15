@@ -41,6 +41,19 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
+function buildBreadcrumbJsonLd(item: NonNullable<Awaited<ReturnType<typeof getEquipmentBySlug>>>) {
+  const slug = item.slug ?? `location-${item.id}-orleans`;
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Accueil', item: SITE_URL },
+      { '@type': 'ListItem', position: 2, name: 'Catalogue', item: `${SITE_URL}/location/catalogue` },
+      { '@type': 'ListItem', position: 3, name: item.name, item: `${SITE_URL}/location/catalogue/${slug}` },
+    ],
+  };
+}
+
 function buildProductJsonLd(item: NonNullable<Awaited<ReturnType<typeof getEquipmentBySlug>>>) {
   const slug = item.slug ?? `location-${item.id}-orleans`;
   const specs = JSON.parse(item.specs) as string[];
@@ -107,6 +120,10 @@ export default async function ProductSlugPage({ params }: Props) {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(buildProductJsonLd(item)) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(buildBreadcrumbJsonLd(item)) }}
       />
       <ProductDetailClient item={parsedItem} similarItems={similarItems} />
     </>
