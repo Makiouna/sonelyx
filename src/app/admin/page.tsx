@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { authClient } from '@/lib/auth-client';
@@ -77,7 +77,14 @@ export default function AdminDashboard() {
   const [equipment, setEquipment] = useState<EquipmentItem[]>([]);
   const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [users, setUsers] = useState<UserItem[]>([]);
-  
+  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+  const [newMemberName, setNewMemberName] = useState('');
+  const [newMemberEmail, setNewMemberEmail] = useState('');
+  const [newMemberPassword, setNewMemberPassword] = useState('');
+  const [newMemberRole, setNewMemberRole] = useState<'user' | 'admin'>('user');
+  const [addMemberLoading, setAddMemberLoading] = useState(false);
+  const [addMemberError, setAddMemberError] = useState('');
+
   const [loadingEquipment, setLoadingEquipment] = useState(true);
   const [loadingCategories, setLoadingCategories] = useState(true);
   const [loadingUsers, setLoadingUsers] = useState(true);
@@ -546,6 +553,39 @@ export default function AdminDashboard() {
       console.error('Error fetching users:', e);
     } finally {
       setLoadingUsers(false);
+    }
+  }
+
+  async function handleAddMember(e: FormEvent) {
+    e.preventDefault();
+    setAddMemberError('');
+    setAddMemberLoading(true);
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newMemberName,
+          email: newMemberEmail,
+          password: newMemberPassword,
+          role: newMemberRole,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setShowAddMemberModal(false);
+        setNewMemberName('');
+        setNewMemberEmail('');
+        setNewMemberPassword('');
+        setNewMemberRole('user');
+        await fetchUsers();
+      } else {
+        setAddMemberError(data.error || "Erreur lors de la création du compte.");
+      }
+    } catch {
+      setAddMemberError('Erreur réseau.');
+    } finally {
+      setAddMemberLoading(false);
     }
   }
 
@@ -1592,8 +1632,14 @@ export default function AdminDashboard() {
             {/* TAB: USERS */}
             {activeTab === 'users' && (
               <div style={{ backgroundColor: '#ffffff', border: '1px solid rgba(0,0,0,.08)', borderRadius: '24px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,.02)' }}>
-                <div style={{ padding: '24px 30px', borderBottom: '1px solid rgba(0,0,0,.06)' }}>
+                <div style={{ padding: '24px 30px', borderBottom: '1px solid rgba(0,0,0,.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
                   <h3 style={{ fontSize: '18px', fontWeight: 800, margin: 0 }}>Comptes Utilisateurs Inscrits</h3>
+                  <button
+                    onClick={() => { setAddMemberError(''); setShowAddMemberModal(true); }}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '10px 18px', borderRadius: '980px', backgroundColor: '#0071e3', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '13px', fontFamily: 'inherit' }}
+                  >
+                    <Plus style={{ width: '14px', height: '14px' }} /> Ajouter un membre
+                  </button>
                 </div>
 
                 {loadingUsers ? (
@@ -1613,7 +1659,13 @@ export default function AdminDashboard() {
                       </thead>
                       <tbody style={{ fontSize: '14px', color: '#1d1d1f' }}>
                         {users.map((u, idx) => (
-                          <tr key={u.id} style={{ borderBottom: idx < users.length - 1 ? '1px solid rgba(0,0,0,.04)' : 'none' }}>
+                          <tr
+                            key={u.id}
+                            onClick={() => router.push(`/admin/client/${u.id}`)}
+                            style={{ borderBottom: idx < users.length - 1 ? '1px solid rgba(0,0,0,.04)' : 'none', cursor: 'pointer' }}
+                            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#f5f5f7'; }}
+                            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
+                          >
                             <td style={{ padding: '18px 30px' }}>
                               <div style={{ fontWeight: 700 }}>{u.name}</div>
                               <div style={{ fontSize: '10px', color: '#86868b', fontFamily: 'monospace', marginTop: '2px' }}>{u.id}</div>
@@ -3132,6 +3184,122 @@ export default function AdminDashboard() {
           onScanSuccess={handleGlobalScanSuccess}
           title="Rechercher un produit par scan"
         />
+
+        {/* Add Member Modal */}
+        {showAddMemberModal && (
+          <div
+            style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9000, padding: '20px' }}
+            onClick={e => { if (e.target === e.currentTarget && !addMemberLoading) setShowAddMemberModal(false); }}
+          >
+            <div style={{ backgroundColor: '#fff', borderRadius: '20px', padding: '28px', width: '100%', maxWidth: '440px', boxShadow: '0 24px 60px rgba(0,0,0,0.2)', fontFamily: 'var(--font-hanken-grotesk), -apple-system, sans-serif' }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ width: 42, height: 42, borderRadius: 12, backgroundColor: '#e8f1fd', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Users style={{ width: 20, height: 20, color: '#0071e3' }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: '#1d1d1f' }}>Ajouter un membre</div>
+                    <div style={{ fontSize: 12, color: '#86868b', marginTop: 2 }}>Crée un nouveau compte utilisateur</div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => !addMemberLoading && setShowAddMemberModal(false)}
+                  style={{ padding: 6, borderRadius: 8, border: '1px solid rgba(0,0,0,.1)', backgroundColor: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#86868b' }}
+                >
+                  <X style={{ width: 16, height: 16 }} />
+                </button>
+              </div>
+
+              <form onSubmit={handleAddMember} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: '#6e6e73', display: 'block', marginBottom: 6 }}>Nom complet</label>
+                  <input
+                    type="text"
+                    required
+                    value={newMemberName}
+                    onChange={e => setNewMemberName(e.target.value)}
+                    style={{ width: '100%', padding: '12px 14px', borderRadius: 12, border: '1px solid rgba(0,0,0,.12)', fontSize: 14, fontFamily: 'inherit', boxSizing: 'border-box' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: '#6e6e73', display: 'block', marginBottom: 6 }}>Email</label>
+                  <input
+                    type="email"
+                    required
+                    value={newMemberEmail}
+                    onChange={e => setNewMemberEmail(e.target.value)}
+                    style={{ width: '100%', padding: '12px 14px', borderRadius: 12, border: '1px solid rgba(0,0,0,.12)', fontSize: 14, fontFamily: 'inherit', boxSizing: 'border-box' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: '#6e6e73', display: 'block', marginBottom: 6 }}>Mot de passe</label>
+                  <input
+                    type="password"
+                    required
+                    minLength={8}
+                    value={newMemberPassword}
+                    onChange={e => setNewMemberPassword(e.target.value)}
+                    style={{ width: '100%', padding: '12px 14px', borderRadius: 12, border: '1px solid rgba(0,0,0,.12)', fontSize: 14, fontFamily: 'inherit', boxSizing: 'border-box' }}
+                  />
+                  <div style={{ fontSize: 11, color: '#86868b', marginTop: 4 }}>8 caractères minimum.</div>
+                </div>
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 700, color: '#6e6e73', display: 'block', marginBottom: 6 }}>Rôle</label>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    {(['user', 'admin'] as const).map(r => (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => setNewMemberRole(r)}
+                        style={{
+                          flex: 1,
+                          padding: '10px 14px',
+                          borderRadius: 12,
+                          border: `1px solid ${newMemberRole === r ? '#0071e3' : 'rgba(0,0,0,.12)'}`,
+                          backgroundColor: newMemberRole === r ? '#f0f7ff' : '#fafafa',
+                          color: newMemberRole === r ? '#0071e3' : '#1d1d1f',
+                          fontWeight: newMemberRole === r ? 700 : 500,
+                          fontSize: 13,
+                          cursor: 'pointer',
+                          fontFamily: 'inherit',
+                        }}
+                      >
+                        {r === 'admin' ? 'Administrateur' : 'Utilisateur'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {addMemberError && (
+                  <div style={{ fontSize: 13, color: '#ef4444', backgroundColor: '#fef2f2', border: '1px solid #fee2e2', borderRadius: 10, padding: '10px 14px' }}>
+                    {addMemberError}
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 6 }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddMemberModal(false)}
+                    disabled={addMemberLoading}
+                    style={{ padding: '10px 18px', borderRadius: 980, backgroundColor: '#f5f5f7', color: '#1d1d1f', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 13, fontFamily: 'inherit' }}
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={addMemberLoading}
+                    style={{ padding: '10px 20px', borderRadius: 980, backgroundColor: addMemberLoading ? '#86868b' : '#0071e3', color: '#fff', border: 'none', cursor: addMemberLoading ? 'default' : 'pointer', fontWeight: 700, fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 7, fontFamily: 'inherit', transition: 'background 0.2s' }}
+                  >
+                    {addMemberLoading
+                      ? <><Loader2 style={{ width: 14, height: 14, animation: 'spin 1s linear infinite' }} /> Création…</>
+                      : <><Plus style={{ width: 14, height: 14 }} /> Créer le compte</>
+                    }
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
 
       </div>
 

@@ -43,6 +43,9 @@ import {
   FolderOpen,
   Eye,
   FileCheck2,
+  Globe,
+  Monitor,
+  Wifi,
 } from 'lucide-react';
 import { groupQuotesByProject, getProjectStatus, projectStatusLabel, projectStatusColors } from '@/lib/project-grouping';
 import ScannerModal from '@/components/scanner-modal';
@@ -114,6 +117,13 @@ interface ClientUser {
   createdAt: string;
 }
 
+interface LastConnection {
+  ipAddress: string;
+  device: string;
+  geoLocation: string;
+  createdAt: string;
+}
+
 interface Inspection {
   id: string;
   quoteId: string;
@@ -175,6 +185,8 @@ export default function ClientFolderPage({ params }: PageProps) {
 
   // Core lists
   const [client, setClient] = useState<ClientUser | null>(null);
+  const [lastConnection, setLastConnection] = useState<LastConnection | null>(null);
+  const [roleUpdating, setRoleUpdating] = useState(false);
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [equipment, setEquipment] = useState<EquipmentItem[]>([]);
   const [tvaRate, setTvaRate] = useState(20);
@@ -388,6 +400,38 @@ export default function ClientFolderPage({ params }: PageProps) {
     return () => unregisterConsumer('logistics-passive');
   }, [activeLogisticsQuoteId, scannerAction, registerConsumer, unregisterConsumer]);
 
+  const handleToggleRole = async () => {
+    if (!client) return;
+    if (client.id === session?.user?.id) {
+      alert('Vous ne pouvez pas modifier votre propre rôle depuis cette page.');
+      return;
+    }
+    const newRole = client.role === 'admin' ? 'user' : 'admin';
+    const confirmMessage = newRole === 'admin'
+      ? `Confirmer : donner les droits administrateur à ${client.name} ?`
+      : `Confirmer : retirer les droits administrateur à ${client.name} ?`;
+    if (!confirm(confirmMessage)) return;
+
+    setRoleUpdating(true);
+    try {
+      const res = await fetch(`/api/admin/users/${client.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: newRole }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setClient(data.user);
+      } else {
+        alert(data.error || 'Erreur lors de la mise à jour du rôle.');
+      }
+    } catch {
+      alert('Erreur réseau.');
+    } finally {
+      setRoleUpdating(false);
+    }
+  };
+
   const fetchClientData = async () => {
     setLoading(true);
     try {
@@ -408,14 +452,12 @@ export default function ClientFolderPage({ params }: PageProps) {
         setEquipment(eqData.items);
       }
 
-      // 3. Fetch client details from users endpoint
-      const usersRes = await fetch('/api/admin/users');
-      const usersData = await usersRes.json();
-      if (usersData.success) {
-        const found = usersData.users.find((u: any) => u.id === clientId);
-        if (found) {
-          setClient(found);
-        }
+      // 3. Fetch client details + last known connection (IP/localisation/device)
+      const userRes = await fetch(`/api/admin/users/${clientId}`);
+      const userData = await userRes.json();
+      if (userData.success) {
+        setClient(userData.user);
+        setLastConnection(userData.lastConnection);
       }
 
       // 3b. Fetch payment settings (IBAN/BIC)
@@ -940,6 +982,94 @@ export default function ClientFolderPage({ params }: PageProps) {
           <span style={{ fontSize: '12px', fontWeight: 800, textTransform: 'uppercase', color: '#0071e3', backgroundColor: '#e8f1fd', padding: '6px 12px', borderRadius: '980px' }}>
             {projects.length} projet{projects.length !== 1 ? 's' : ''} · N° {client.id.slice(0, 8)}
           </span>
+        </div>
+
+        {/* ── Compte & Sécurité ─────────────────────────────────────── */}
+        <div style={{ backgroundColor: '#ffffff', border: '1px solid rgba(0,0,0,.08)', borderRadius: '24px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,.02)' }}>
+          <div style={{ padding: '20px 26px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', borderBottom: '1px solid rgba(0,0,0,.06)' }}>
+            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ width: '36px', height: '36px', borderRadius: '10px', backgroundColor: '#e8f1fd', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Shield style={{ width: '18px', height: '18px', color: '#0071e3' }} />
+              </div>
+              Compte & Sécurité
+            </h3>
+            <button
+              onClick={handleToggleRole}
+              disabled={roleUpdating}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 16px',
+                borderRadius: '980px',
+                backgroundColor: client.role === 'admin' ? '#fef2f2' : '#0071e3',
+                color: client.role === 'admin' ? '#ef4444' : '#fff',
+                border: client.role === 'admin' ? '1px solid #fee2e2' : 'none',
+                cursor: roleUpdating ? 'default' : 'pointer',
+                opacity: roleUpdating ? .6 : 1,
+                fontWeight: 700,
+                fontSize: '13px',
+                fontFamily: 'inherit',
+              }}
+            >
+              {roleUpdating ? (
+                <Loader2 style={{ width: '14px', height: '14px', animation: 'spin 1s linear infinite' }} />
+              ) : client.role === 'admin' ? (
+                <ShieldAlert style={{ width: '14px', height: '14px' }} />
+              ) : (
+                <ShieldCheck style={{ width: '14px', height: '14px' }} />
+              )}
+              {client.role === 'admin' ? 'Retirer les droits admin' : 'Passer administrateur'}
+            </button>
+          </div>
+          <div style={{ padding: '20px 26px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
+            <div>
+              <div style={{ fontSize: '11px', fontWeight: 700, color: '#86868b', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '6px' }}>Identifiant client</div>
+              <div style={{ fontSize: '13px', fontFamily: 'monospace', color: '#1d1d1f', userSelect: 'all' }}>{client.id}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '11px', fontWeight: 700, color: '#86868b', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '6px' }}>Rôle</div>
+              <span style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '4px 12px',
+                borderRadius: '980px',
+                fontSize: '12px',
+                fontWeight: 700,
+                backgroundColor: client.role === 'admin' ? '#fef2f2' : '#e8f1fd',
+                color: client.role === 'admin' ? '#ef4444' : '#0071e3',
+                border: `1px solid ${client.role === 'admin' ? '#fee2e2' : '#d0e3ff'}`,
+              }}>
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: client.role === 'admin' ? '#ef4444' : '#0071e3' }}></span>
+                {client.role === 'admin' ? 'Admin' : 'Utilisateur'}
+              </span>
+            </div>
+            <div>
+              <div style={{ fontSize: '11px', fontWeight: 700, color: '#86868b', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '6px' }}>Dernière adresse IP</div>
+              <div style={{ fontSize: '13px', color: '#1d1d1f', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <Wifi style={{ width: '14px', height: '14px', color: '#86868b' }} /> {lastConnection?.ipAddress ?? 'Aucune connexion enregistrée'}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: '11px', fontWeight: 700, color: '#86868b', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '6px' }}>Localisation</div>
+              <div style={{ fontSize: '13px', color: '#1d1d1f', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <Globe style={{ width: '14px', height: '14px', color: '#86868b' }} /> {lastConnection?.geoLocation ?? '—'}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: '11px', fontWeight: 700, color: '#86868b', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '6px' }}>Appareil</div>
+              <div style={{ fontSize: '13px', color: '#1d1d1f', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <Monitor style={{ width: '14px', height: '14px', color: '#86868b' }} /> {lastConnection?.device ?? '—'}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: '11px', fontWeight: 700, color: '#86868b', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '6px' }}>Dernière connexion</div>
+              <div style={{ fontSize: '13px', color: '#1d1d1f', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <Clock style={{ width: '14px', height: '14px', color: '#86868b' }} /> {lastConnection ? new Date(lastConnection.createdAt).toLocaleString('fr-FR') : 'Jamais connecté'}
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* ── Documents Administratifs ─────────────────────────────── */}
